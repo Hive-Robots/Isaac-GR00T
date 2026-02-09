@@ -70,7 +70,9 @@ if __name__ == "__main__":
     config.model.use_relative_action = True
 
     config.training.start_from_checkpoint = ft_config.base_model_path
-    config.training.optim = "adamw_torch"
+    #config.training.optim = "adamw_torch"
+    config.training.optim = "paged_adamw_8bit"
+    config.training.gradient_checkpointing = True # Trade compute for memory
     config.training.global_batch_size = ft_config.global_batch_size
     config.training.dataloader_num_workers = ft_config.dataloader_num_workers
     config.training.learning_rate = ft_config.learning_rate
@@ -83,7 +85,7 @@ if __name__ == "__main__":
     config.training.max_steps = ft_config.max_steps
     config.training.weight_decay = ft_config.weight_decay
     config.training.warmup_ratio = ft_config.warmup_ratio
-    config.training.wandb_project = "finetune-gr00t-n1d6"
+    config.training.wandb_project = "PiGr00t1.6"
 
     config.data.shard_size = ft_config.shard_size
     config.data.episode_sampling_rate = ft_config.episode_sampling_rate
