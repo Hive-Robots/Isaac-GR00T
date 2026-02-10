@@ -1,0 +1,48 @@
+{
+  "state": {
+    "left_arm": {
+      "start": 0,
+      "end": 7
+    },
+    "right_arm": {
+      "start": 7,
+      "end": 14
+    },
+    "left_ee": {
+      "start": 14,
+      "end": 21
+    },
+    "right_ee": {
+      "start": 21,
+      "end": 28
+    }
+  },
+  "action": {
+    "left_arm": {
+      "start": 0,
+      "end": 7
+    },
+    "right_arm": {
+      "start": 7,
+      "end": 14
+    },
+    "left_ee": {
+      "start": 14,
+      "end": 21
+    },
+    "right_ee": {
+      "start": 21,
+      "end": 28
+    }
+  },
+  "video": {
+    "cam_left_high": {
+      "original_key": "observation.images.cam_left_high"
+    }
+  },
+  "annotation": {
+    "human.task_description": {
+      "original_key": "task_index"
+    }
+  }
+}
