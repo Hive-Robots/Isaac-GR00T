@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from math import ceil
@@ -43,6 +44,10 @@ import tqdm
 import tyro
 
 from huggingface_hub import HfApi
+
+if __package__ is None or __package__ == "":
+    sys.path.append(str(Path(__file__).resolve().parents[2]))
+
 from lerobot.utils.constants import HF_LEROBOT_HOME
 from scripts.lerobot_conversion.constants import ROBOT_CONFIGS, RobotConfig
 

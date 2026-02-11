@@ -126,4 +126,4 @@ python gr00t/eval/open_loop_eval.py \
 
 The evaluation generates visualizations comparing predicted actions against ground truth trajectories:
 
-<img src="../media/open_loop_eval_so100.jpeg" width="800" alt="Open loop evaluation results showing predicted vs ground truth trajectories" />
+<img src="../media/open_loop_eval_so100.png" width="800" alt="Open loop evaluation results showing predicted vs ground truth trajectories" />

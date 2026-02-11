@@ -1,5 +1,7 @@
 """
-Script Json to Lerobot.
+Script Json to Lerobot. This code is from the unitree_lerobot repo.
+It is a template for converting Unitree xr_teleop JSON data to LeRobot v3 format.
+It is not meant to be run directly. Run the code from the unitree_lerobot repo.
 
 python unitree_lerobot/utils/new_convert_unitree_json_to_lerobot.py \
     --raw-dir $HOME/datasets/g1_grabcube_double_hand \
