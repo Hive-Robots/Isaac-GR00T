@@ -46,7 +46,7 @@ unitree_g1_xrtele = {
         ],
     ),
     "action": ModalityConfig(
-        delta_indices=[0],
+        delta_indices=list(range(30)),
         modality_keys=[
             "kLeftShoulderPitch",
             "kLeftShoulderRoll",

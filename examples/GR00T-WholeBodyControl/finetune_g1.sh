@@ -10,7 +10,7 @@ torchrun --nproc_per_node=$NUM_GPUS --master_port=29500 \
     --dataset_path examples/GR00T-WholeBodyControl/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim/unitree_g1.LMPnPAppleToPlateDC \
     --embodiment_tag UNITREE_G1 \
     --num_gpus $NUM_GPUS \
-    --output_dir /tmp/g1_finetune \
+    --output_dir /mnt/sata1/gr00t16/g1_finetune \
     --save_total_limit 5 \
     --max_steps 10000 \
     --save_steps 2000 \
