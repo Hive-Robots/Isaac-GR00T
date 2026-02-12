@@ -1,8 +1,12 @@
-from threading import Lock
+from threading import Event, Lock, Thread
 import time
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+import logging
+
+import cv2
+import zmq
 
 from unitree_sdk2py.core.channel import (
     ChannelFactoryInitialize,
@@ -65,14 +69,25 @@ def make_hand_mode(motor_index: int) -> int:
 
 
 class G1DDSRobot:
-    def __init__(self, network_interface: Optional[str], camera_keys: List[str]):
+    def __init__(
+        self,
+        network_interface: Optional[str],
+        camera_keys: List[str],
+        image_server_address: str = "192.168.123.164",
+        image_server_port: int = 5555,
+        head_image_shape: tuple[int, int, int] = (480, 640, 3),
+    ):
         self.network_interface = network_interface
         self.camera_keys = camera_keys
+        self.image_server_address = image_server_address
+        self.image_server_port = image_server_port
+        self.head_image_shape = head_image_shape
 
         self._lock = Lock()
         self._low_state = None
         self._left_hand_state = None
         self._right_hand_state = None
+        self._latest_head_image = None
 
         self._crc = CRC()
         self._low_cmd = unitree_hg_msg_dds__LowCmd_()
@@ -88,8 +103,10 @@ class G1DDSRobot:
         self._low_sub = None
         self._left_hand_sub = None
         self._right_hand_sub = None
+        self._image_client_thread = None
+        self._image_client_stop_event = Event()
 
-    def connect(self, state_init_timeout_s: float = 5.0):
+    def connect(self, state_init_timeout_s: float = 30.0):
         if self.network_interface:
             ChannelFactoryInitialize(0, self.network_interface)
         else:
@@ -109,15 +126,68 @@ class G1DDSRobot:
         self._low_sub.Init(self._on_low_state, 10)
         self._left_hand_sub.Init(self._on_left_hand_state, 10)
         self._right_hand_sub.Init(self._on_right_hand_state, 10)
+        self._start_image_client()
 
         deadline = time.time() + state_init_timeout_s
         while time.time() < deadline:
             with self._lock:
                 if self._low_state is not None:
                     return
+            print("[INFO] Waiting to subscribe to DDS topic 'rt/lowstate'")
             time.sleep(0.01)
 
         raise RuntimeError("Timed out waiting for first rt/lowstate message from G1")
+
+    def _start_image_client(self):
+        if cv2 is None or zmq is None:
+            raise RuntimeError(
+                "Image streaming requested but cv2/zmq are unavailable. Install opencv-python and pyzmq."
+            )
+
+        self._image_client_thread = Thread(
+            target=self._run_image_client_loop, name="g1_image_client", daemon=True
+        )
+        self._image_client_thread.start()
+
+    def _run_image_client_loop(self):
+        context = zmq.Context()
+        socket = context.socket(zmq.SUB)
+        socket.connect(f"tcp://{self.image_server_address}:{self.image_server_port}")
+        socket.setsockopt_string(zmq.SUBSCRIBE, "")
+        socket.setsockopt(zmq.RCVTIMEO, 200)
+
+        head_h, head_w, _ = self.head_image_shape
+        logging.info(
+            "G1 image client connected to tcp://%s:%d (head shape=%s)",
+            self.image_server_address,
+            self.image_server_port,
+            self.head_image_shape,
+        )
+
+        try:
+            while not self._image_client_stop_event.is_set():
+                try:
+                    message = socket.recv()
+                except zmq.error.Again:
+                    continue
+
+                np_img = np.frombuffer(message, dtype=np.uint8)
+                full_image = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
+                if full_image is None:
+                    continue
+
+                if full_image.shape[0] != head_h or full_image.shape[1] < head_w:
+                    # The server may concatenate multiple camera streams; we only keep left-most head view.
+                    resized = cv2.resize(full_image, (head_w, head_h))
+                    head_image = resized
+                else:
+                    head_image = full_image[:, :head_w]
+
+                with self._lock:
+                    self._latest_head_image = head_image.copy()
+        finally:
+            socket.close()
+            context.term()
 
     def _on_low_state(self, msg: LowState_):
         with self._lock:
@@ -136,11 +206,18 @@ class G1DDSRobot:
             low_state = self._low_state
             left_hand = self._left_hand_state
             right_hand = self._right_hand_state
+            latest_head_image = self._latest_head_image
 
         if low_state is None:
             raise RuntimeError("No low_state received yet")
 
-        obs = {k: np.zeros((480, 640, 3), dtype=np.uint8) for k in self.camera_keys}
+        if latest_head_image is None:
+            # No frame received yet; fall back to black image until image client gets first packet.
+            fallback = np.zeros(self.head_image_shape, dtype=np.uint8)
+            obs = {k: fallback for k in self.camera_keys}
+            logging.warning("No head image received yet; returning black image as fallback")
+        else:
+            obs = {k: latest_head_image.copy() for k in self.camera_keys}
 
         for key, idx in G1_ARM_KEY_TO_INDEX.items():
             obs[key] = float(low_state.motor_state[idx].q)
