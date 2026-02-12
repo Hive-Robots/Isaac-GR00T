@@ -23,13 +23,21 @@ from dataclasses import asdict, dataclass
 import logging
 from pprint import pformat
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import draccus
 import numpy as np
 
 from importlib.util import module_from_spec, spec_from_file_location
 from gr00t.policy.server_client import PolicyClient
+
+try:
+    from gr00t.eval.real_robot.g1.g1_dds_robot import G1DDSRobot
+except ImportError as exc:  # pragma: no cover - used only on real-robot runtime
+    _UNITREE_IMPORT_ERROR = exc
+else:
+    _UNITREE_IMPORT_ERROR = None
+
 
 def recursive_add_extra_dim(obs: Dict) -> Dict:
     """
@@ -153,8 +161,8 @@ class EvalConfig:
     action_horizon: int = 8
     lang_instruction: str = "Perform the task."
     control_hz: float = 30.0
-
-
+    network_interface: Optional[str] = None
+    state_init_timeout_s: float = 5.0
 # =============================================================================
 # Main Eval Loop
 # =============================================================================
@@ -167,16 +175,19 @@ def eval(cfg: EvalConfig):
     """
     Main entry point for real-robot policy evaluation.
     """
+    if _UNITREE_IMPORT_ERROR is not None:
+        raise RuntimeError(
+            "unitree_sdk2py is required for G1 eval. Install with: pip install unitree_sdk2py"
+        ) from _UNITREE_IMPORT_ERROR
+
     logging.basicConfig(level=logging.INFO)
     logging.info(pformat(asdict(cfg)))
 
     # -------------------------------------------------------------------------
     # 1. Initialize Robot Hardware
     # -------------------------------------------------------------------------
-    # TODO: Initialize Unitree G1 hardware and SDK here.
-    # robot = ...
-    # robot.connect()
-
+    robot = G1DDSRobot(network_interface=cfg.network_interface, camera_keys=policy.camera_keys)
+    robot.connect(state_init_timeout_s=cfg.state_init_timeout_s)
     # -------------------------------------------------------------------------
     # 2. Initialize Policy Wrapper + Client
     # -------------------------------------------------------------------------
@@ -196,86 +207,19 @@ def eval(cfg: EvalConfig):
     # 3. Main real-time control loop
     # -------------------------------------------------------------------------
     while True:
-        # TODO: Collect observation from Unitree G1.
-        # obs = robot.get_observation()
-        obs = {k: np.zeros((480, 640, 3), dtype=np.uint8) for k in policy.camera_keys}
-        for k in policy.robot_state_keys:
-            obs[k] = 0.0
-        obs["lang"] = cfg.lang_instruction  # insert language
-
-        # obs = {
-        #     "cam_left_high": np.zeros((480, 640, 3), dtype=np.uint8),
-        #     "kLeftShoulderPitch": 0.0,
-        #     "kLeftShoulderRoll": 0.0,
-        #     "kLeftShoulderYaw": 0.0,
-        #     "kLeftElbow": 0.0,
-        #     "kLeftWristRoll": 0.0,
-        #     "kLeftWristPitch": 0.0,
-        #     "kLeftWristYaw": 0.0,
-        #     "kRightShoulderPitch": 0.0,
-        #     "kRightShoulderRoll": 0.0,
-        #     "kRightShoulderYaw": 0.0,
-        #     "kRightElbow": 0.0,
-        #     "kRightWristRoll": 0.0,
-        #     "kRightWristPitch": 0.0,
-        #     "kRightWristYaw": 0.0,
-        #     "kLeftHandThumb0": 0.0,
-        #     "kLeftHandThumb1": 0.0,
-        #     "kLeftHandThumb2": 0.0,
-        #     "kLeftHandMiddle0": 0.0,
-        #     "kLeftHandMiddle1": 0.0,
-        #     "kLeftHandIndex0": 0.0,
-        #     "kLeftHandIndex1": 0.0,
-        #     "kRightHandThumb0": 0.0,
-        #     "kRightHandThumb1": 0.0,
-        #     "kRightHandThumb2": 0.0,
-        #     "kRightHandIndex0": 0.0,
-        #     "kRightHandIndex1": 0.0,
-        #     "kRightHandMiddle0": 0.0,
-        #     "kRightHandMiddle1": 0.0,
-        #     "lang": cfg.lang_instruction,
-        # }
+        obs = robot.get_observation()
+        obs["lang"] = cfg.lang_instruction
 
         actions = policy.get_action(obs)
 
         for i, action_dict in enumerate(actions[: cfg.action_horizon]):
             tic = time.time()
             logging.info("action[%d]: %s", i, action_dict)
-            # action_dict = {
-            #     "kLeftShoulderPitch": 0.0,
-            #     "kLeftShoulderRoll": 0.0,
-            #     "kLeftShoulderYaw": 0.0,
-            #     "kLeftElbow": 0.0,
-            #     "kLeftWristRoll": 0.0,
-            #     "kLeftWristPitch": 0.0,
-            #     "kLeftWristYaw": 0.0,
-            #     "kRightShoulderPitch": 0.0,
-            #     "kRightShoulderRoll": 0.0,
-            #     "kRightShoulderYaw": 0.0,
-            #     "kRightElbow": 0.0,
-            #     "kRightWristRoll": 0.0,
-            #     "kRightWristPitch": 0.0,
-            #     "kRightWristYaw": 0.0,
-            #     "kLeftHandThumb0": 0.0,
-            #     "kLeftHandThumb1": 0.0,
-            #     "kLeftHandThumb2": 0.0,
-            #     "kLeftHandMiddle0": 0.0,
-            #     "kLeftHandMiddle1": 0.0,
-            #     "kLeftHandIndex0": 0.0,
-            #     "kLeftHandIndex1": 0.0,
-            #     "kRightHandThumb0": 0.0,
-            #     "kRightHandThumb1": 0.0,
-            #     "kRightHandThumb2": 0.0,
-            #     "kRightHandIndex0": 0.0,
-            #     "kRightHandIndex1": 0.0,
-            #     "kRightHandMiddle0": 0.0,
-            #     "kRightHandMiddle1": 0.0,
-            # }
-            # TODO: Send action_dict to Unitree G1.
-            # robot.send_action(action_dict)
+            robot.send_action(action_dict)
             toc = time.time()
-            if toc - tic < 1.0 / cfg.control_hz:
-                time.sleep(1.0 / cfg.control_hz - (toc - tic))
+            dt = toc - tic
+            if dt < 1.0 / cfg.control_hz:
+                time.sleep(1.0 / cfg.control_hz - dt)
 
 
 if __name__ == "__main__":
