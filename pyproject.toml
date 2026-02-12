@@ -38,6 +38,7 @@ dependencies = [
     "wandb==0.23.0",
     "pyzmq==27.0.1",
     "deepspeed==0.17.6",
+    "logging-mp==0.1.6",
 ]
 
 [project.optional-dependencies]
