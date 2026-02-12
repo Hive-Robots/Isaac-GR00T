@@ -163,6 +163,10 @@ class EvalConfig:
     control_hz: float = 30.0
     network_interface: Optional[str] = None
     state_init_timeout_s: float = 5.0
+    image_server_address: str = "192.168.123.164"
+    image_server_port: int = 5556
+    head_image_height: int = 480
+    head_image_width: int = 640
 # =============================================================================
 # Main Eval Loop
 # =============================================================================
@@ -184,12 +188,7 @@ def eval(cfg: EvalConfig):
     logging.info(pformat(asdict(cfg)))
 
     # -------------------------------------------------------------------------
-    # 1. Initialize Robot Hardware
-    # -------------------------------------------------------------------------
-    robot = G1DDSRobot(network_interface=cfg.network_interface, camera_keys=policy.camera_keys)
-    robot.connect(state_init_timeout_s=cfg.state_init_timeout_s)
-    # -------------------------------------------------------------------------
-    # 2. Initialize Policy Wrapper + Client
+    # 1. Initialize Policy Wrapper + Client
     # -------------------------------------------------------------------------
     spec = spec_from_file_location("modality_config", cfg.modality_config_path)
     if spec is None or spec.loader is None:
@@ -200,6 +199,18 @@ def eval(cfg: EvalConfig):
 
     policy_client = PolicyClient(host=cfg.policy_host, port=cfg.policy_port)
     policy = G1XRTeleAdapter(policy_client, modality_configs)
+
+    # -------------------------------------------------------------------------
+    # 2. Initialize Robot Hardware
+    # -------------------------------------------------------------------------
+    robot = G1DDSRobot(
+        network_interface=cfg.network_interface,
+        camera_keys=policy.camera_keys,
+        image_server_address=cfg.image_server_address,
+        image_server_port=cfg.image_server_port,
+        head_image_shape=(cfg.head_image_height, cfg.head_image_width, 3),
+    )
+    robot.connect(state_init_timeout_s=cfg.state_init_timeout_s)
 
     logging.info('Policy ready with instruction: "%s"', cfg.lang_instruction)
 
