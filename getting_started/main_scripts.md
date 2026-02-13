@@ -48,7 +48,8 @@ Run (example):
 uv run python gr00t/eval/open_loop_eval.py \
   --model-path /tmp/gr00t_finetune/checkpoint-10000 \
   --dataset-path demo_data/cube_to_bowl_5/ \
-  --embodiment-tag NEW_EMBODIMENT
+  --embodiment-tag NEW_EMBODIMENT \
+  --save-plot-path /mnt/sata1/gr00t16/open-loop-eval/
 ```
 Arguments:
 - `--host` (str, default: `127.0.0.1`). Host to connect to (used only if `--model-path` is not provided).
