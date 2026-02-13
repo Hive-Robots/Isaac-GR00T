@@ -4,21 +4,21 @@ import numpy as np
 import argparse
 import threading
 import torch
-from unitree_lerobot.eval_robot.image_server.image_client import ImageClient
-from unitree_lerobot.eval_robot.robot_control.robot_arm import (
+from image_server.image_client import ImageClient
+from robot_sdk.robot_control.robot_arm import (
     G1_29_ArmController,
     G1_23_ArmController,
 )
-from unitree_lerobot.eval_robot.robot_control.robot_arm_ik import G1_29_ArmIK, G1_23_ArmIK
-from unitree_lerobot.eval_robot.robot_control.robot_hand_unitree import (
+from robot_sdk.robot_control.robot_arm_ik import G1_29_ArmIK, G1_23_ArmIK
+from robot_sdk.robot_control.robot_hand_unitree import (
     Dex3_1_Controller,
     Dex1_1_Gripper_Controller,
 )
 
-from unitree_lerobot.eval_robot.utils.episode_writer import EpisodeWriter
+from robot_sdk.utils.episode_writer import EpisodeWriter
 
-from unitree_lerobot.eval_robot.robot_control.robot_hand_inspire import Inspire_Controller
-from unitree_lerobot.eval_robot.robot_control.robot_hand_brainco import Brainco_Controller
+from robot_sdk.robot_control.robot_hand_inspire import Inspire_Controller
+from robot_sdk.robot_control.robot_hand_brainco import Brainco_Controller
 
 
 from unitree_sdk2py.core.channel import ChannelPublisher
@@ -250,7 +250,7 @@ def setup_robot_interface(args: argparse.Namespace) -> dict[str, Any]:
     if is_sim:
         reset_pose_publisher = ChannelPublisher("rt/reset_pose/cmd", String_)
         reset_pose_publisher.Init()
-        from unitree_lerobot.eval_robot.utils.sim_state_topic import (
+        from robot_sdk.utils.sim_state_topic import (
             start_sim_state_subscribe,
             start_sim_reward_subscribe,
         )

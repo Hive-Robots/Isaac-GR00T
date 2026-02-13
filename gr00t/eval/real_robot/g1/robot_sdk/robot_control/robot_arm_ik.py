@@ -5,15 +5,14 @@ import pinocchio as pin
 import time
 from pinocchio import casadi as cpin
 from pinocchio.visualize import MeshcatVisualizer
-import os
-import sys
-from unitree_lerobot.eval_robot.utils.weighted_moving_filter import WeightedMovingFilter
+from pathlib import Path
+from robot_sdk.utils.weighted_moving_filter import WeightedMovingFilter
 
 import logging_mp
 
 logger_mp = logging_mp.get_logger(__name__)
-parent2_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(parent2_dir)
+_ROBOT_SDK_ROOT = Path(__file__).resolve().parents[1]
+_G1_ASSETS_DIR = _ROBOT_SDK_ROOT / "assets" / "g1"
 
 
 class G1_29_ArmIK:
@@ -24,13 +23,9 @@ class G1_29_ArmIK:
         self.Visualization = Visualization
 
         if not self.Unit_Test:
-            self.robot = pin.RobotWrapper.BuildFromURDF(
-                "unitree_lerobot/eval_robot/assets/g1/g1_body29_hand14.urdf", "unitree_lerobot/eval_robot/assets/g1/"
-            )
+            self.robot = pin.RobotWrapper.BuildFromURDF(str(_G1_ASSETS_DIR / "g1_body29_hand14.urdf"), str(_G1_ASSETS_DIR))
         else:
-            self.robot = pin.RobotWrapper.BuildFromURDF(
-                "unitree_lerobot/eval_robot/assets/g1/g1_body29_hand14.urdf", "unitree_lerobot/eval_robot/assets/g1/"
-            )  # for test
+            self.robot = pin.RobotWrapper.BuildFromURDF(str(_G1_ASSETS_DIR / "g1_body29_hand14.urdf"), str(_G1_ASSETS_DIR))  # for test
 
         self.mixed_jointsToLockIDs = [
             "left_hip_pitch_joint",
@@ -293,13 +288,9 @@ class G1_23_ArmIK:
         self.Visualization = Visualization
 
         if not self.Unit_Test:
-            self.robot = pin.RobotWrapper.BuildFromURDF(
-                "unitree_lerobot/eval_robot/assets/g1/g1_body23.urdf", "unitree_lerobot/eval_robot/assets/g1/"
-            )
+            self.robot = pin.RobotWrapper.BuildFromURDF(str(_G1_ASSETS_DIR / "g1_body23.urdf"), str(_G1_ASSETS_DIR))
         else:
-            self.robot = pin.RobotWrapper.BuildFromURDF(
-                "unitree_lerobot/eval_robot/assets/g1/g1_body23.urdf", "unitree_lerobot/eval_robot/assets/g1/"
-            )  # for test
+            self.robot = pin.RobotWrapper.BuildFromURDF(str(_G1_ASSETS_DIR / "g1_body23.urdf"), str(_G1_ASSETS_DIR))  # for test
 
         self.mixed_jointsToLockIDs = [
             "left_hip_pitch_joint",

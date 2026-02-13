@@ -2,10 +2,10 @@
 import torch
 import numpy as np
 import logging_mp
-from unitree_lerobot.eval_robot.utils.utils import (
+from robot_sdk.utils.utils import (
     reset_policy,
 )
-from unitree_lerobot.eval_robot.make_robot import (
+from robot_sdk.make_robot import (
     publish_reset_category,
 )
 from dataclasses import dataclass
