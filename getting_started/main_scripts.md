@@ -98,7 +98,8 @@ Script: `gr00t/eval/run_gr00t_server.py`
 Run (example):
 ```bash
 uv run python gr00t/eval/run_gr00t_server.py \
-  --embodiment-tag GR1 \
+  --embodiment-tag NEW_EMBODIMENT \
+  --modality-config-path examples/g1_XRtele/modality_config.py\
   --model-path nvidia/GR00T-N1.6-3B \
   --host 0.0.0.0 \
   --port 5555

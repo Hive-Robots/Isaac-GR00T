@@ -212,10 +212,9 @@ class G1DDSRobot:
             raise RuntimeError("No low_state received yet")
 
         if latest_head_image is None:
-            # No frame received yet; fall back to black image until image client gets first packet.
-            fallback = np.zeros(self.head_image_shape, dtype=np.uint8)
-            obs = {k: fallback for k in self.camera_keys}
-            logging.warning("No head image received yet; returning black image as fallback")
+            # No frame received yet; expose missing image so caller can skip actuation.
+            obs = {k: None for k in self.camera_keys}
+            logging.warning("No head image received yet; camera frames are unavailable")
         else:
             obs = {k: latest_head_image.copy() for k in self.camera_keys}
 

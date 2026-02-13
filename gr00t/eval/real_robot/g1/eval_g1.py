@@ -13,6 +13,36 @@ Major responsibilities:
 
 This file is meant to be a simple, readable reference
 for real-world policy debugging and demos.
+
+Running example:
+    uv run python gr00t/eval/real_robot/g1/eval_g1.py \
+      --modality_config_path examples/g1_XRtele/modality_config.py \
+      --modality_config_name unitree_g1_xrtele \
+      --policy_host 127.0.0.1 \
+      --policy_port 5555 \
+      --action_horizon 8 \
+      --control_hz 25 \
+      --network_interface enx9c69d31ecd9b \
+      --image_server_address 192.168.123.164 \
+      --lang_instruction "Pick up the object and place it in the tray." \
+      --image_server_port 5556 \
+      --head_image_height 480 \
+      --head_image_width 640
+
+Available flags:
+    --modality_config_path (str, default: examples/g1_XRtele/modality_config.py)
+    --modality_config_name (str, default: unitree_g1_xrtele)
+    --policy_host (str, default: localhost)
+    --policy_port (int, default: 5555)
+    --action_horizon (int, default: 8)
+    --lang_instruction (str, default: "Perform the task.")
+    --control_hz (float, default: 25.0)
+    --network_interface (str | None, default: None)
+    --state_init_timeout_s (float, default: 5.0)
+    --image_server_address (str, default: 192.168.123.164)
+    --image_server_port (int, default: 5556)
+    --head_image_height (int, default: 480)
+    --head_image_width (int, default: 640)
 """
 
 # =============================================================================
@@ -93,7 +123,10 @@ class G1XRTeleAdapter:
         model_obs["video"] = {k: obs[k] for k in self.camera_keys}
 
         # (2) Joint + hand state
-        model_obs["state"] = {k: np.asarray(obs[k], dtype=np.float32) for k in self.robot_state_keys}
+        # Ensure each state key is at least 1D so server receives (B, T, D), not (B, T).
+        model_obs["state"] = {
+            k: np.atleast_1d(np.asarray(obs[k], dtype=np.float32)) for k in self.robot_state_keys
+        }
 
         # (3) Language
         model_obs["language"] = {"annotation.human.task_description": obs["lang"]}
@@ -160,11 +193,11 @@ class EvalConfig:
     policy_port: int = 5555
     action_horizon: int = 8
     lang_instruction: str = "Perform the task."
-    control_hz: float = 30.0
+    control_hz: float = 25.0
     network_interface: Optional[str] = None
     state_init_timeout_s: float = 5.0
     image_server_address: str = "192.168.123.164"
-    image_server_port: int = 5556
+    image_server_port: int = 5555
     head_image_height: int = 480
     head_image_width: int = 640
 # =============================================================================
@@ -219,6 +252,10 @@ def eval(cfg: EvalConfig):
     # -------------------------------------------------------------------------
     while True:
         obs = robot.get_observation()
+        if any(obs.get(k) is None for k in policy.camera_keys):
+            logging.warning("Missing camera frame(s); skipping policy/action this cycle")
+            time.sleep(1.0 / cfg.control_hz)
+            continue
         obs["lang"] = cfg.lang_instruction
 
         actions = policy.get_action(obs)
@@ -226,6 +263,8 @@ def eval(cfg: EvalConfig):
         for i, action_dict in enumerate(actions[: cfg.action_horizon]):
             tic = time.time()
             logging.info("action[%d]: %s", i, action_dict)
+            # DEBUG: disable real robot motion and print intended command instead.
+            # print(f"[DRY-RUN] action[{i}] (not sent): {action_dict}")
             robot.send_action(action_dict)
             toc = time.time()
             dt = toc - tic
