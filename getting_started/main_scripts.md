@@ -75,6 +75,7 @@ uv run python scripts/deployment/standalone_inference_script.py \
   --dataset-path demo_data/robot_sim.PickNPlace/ \
   --embodiment-tag GR1
 ```
+
 Arguments:
 - `--host` (str, default: `127.0.0.1`). Host to connect to. (Not used in this script!)
 - `--port` (int, default: 5555). Port to connect to. (Not used in this script!)
@@ -101,7 +102,7 @@ Run (example):
 uv run python gr00t/eval/run_gr00t_server.py \
   --embodiment-tag NEW_EMBODIMENT \
   --modality-config-path examples/g1_XRtele/modality_config.py\
-  --model-path nvidia/GR00T-N1.6-3B \
+  --model-path /mnt/sata1/gr00t16/... \
   --host 0.0.0.0 \
   --port 5555
 ```
@@ -135,6 +136,21 @@ Arguments:
 - `--env-name` (str, default: `gr1_unified/PosttrainPnPNovelFromPlateToBowlSplitA_GR1ArmsAndWaistFourierHands_Env`). Env name.
 - `--n-envs` (int, default: 8). Number of parallel environments.
 - `--n-action-steps` (int, default: 8). Action steps per policy call.
+
+
+Or use a robot-specific inference script:
+
+```bash
+uv run python gr00t/eval/real_robot/g1/eval_g1.py \
+  --modality_config_path examples/g1_XRtele/modality_config.py \
+  --modality_config_name unitree_g1_xrtele \
+  --policy_host 127.0.0.1 \
+  --policy_port 5555 \
+  --action_horizon 8 \
+  --control_hz 25 \
+  --network_interface enx9c69d31ecd9b
+
+```
 
 Notes:
 - These CLIs are defined via `tyro` dataclass parsing or `argparse`. Run `--help` for tyro/argparse output.

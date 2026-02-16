@@ -176,6 +176,25 @@ class G1XRTeleAdapter:
         return [self.decode_action_chunk(action_chunk, t) for t in range(horizon)]
 
 
+def wait_for_camera_frames(robot: "G1DDSRobot", camera_keys: List[str], timeout_s: float = 5.0) -> bool:
+    """
+    Light-weight check that camera frames are available before entering control loop.
+    """
+    start = time.perf_counter()
+    while time.perf_counter() - start < timeout_s:
+        obs = robot.get_observation()
+        if all(obs.get(k) is not None for k in camera_keys):
+            logging.info("Camera frames detected.")
+            return True
+        time.sleep(0.05)
+
+    logging.warning(
+        "No camera frames detected after %.1fs; check image_server connection/resolution.",
+        timeout_s,
+    )
+    return False
+
+
 # =============================================================================
 # Evaluation Config
 # =============================================================================
@@ -196,6 +215,8 @@ class EvalConfig:
     control_hz: float = 25.0
     network_interface: Optional[str] = None
     state_init_timeout_s: float = 5.0
+    camera_init_timeout_s: float = 5.0
+    require_start_keypress: bool = True
     image_server_address: str = "192.168.123.164"
     image_server_port: int = 5555
     head_image_height: int = 480
@@ -244,8 +265,14 @@ def eval(cfg: EvalConfig):
         head_image_shape=(cfg.head_image_height, cfg.head_image_width, 3),
     )
     robot.connect(state_init_timeout_s=cfg.state_init_timeout_s)
+    wait_for_camera_frames(robot, policy.camera_keys, timeout_s=cfg.camera_init_timeout_s)
 
     logging.info('Policy ready with instruction: "%s"', cfg.lang_instruction)
+    if cfg.require_start_keypress:
+        user_input = input("Enter 's' to start the evaluation: ")
+        if user_input.strip().lower() != "s":
+            logging.info("Start canceled by user input: %s", user_input)
+            return
 
     # -------------------------------------------------------------------------
     # 3. Main real-time control loop
