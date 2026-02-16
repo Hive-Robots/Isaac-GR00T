@@ -14,6 +14,7 @@ import threading
 from multiprocessing import Process, Value, Array
 
 import logging_mp
+from robot_sdk.utils.dds import ensure_channel_factory_initialized
 
 logging_mp.basic_config(level=logging_mp.INFO)
 logger_mp = logging_mp.get_logger(__name__)
@@ -39,6 +40,7 @@ class Dex3_1_Controller:
         Unit_Test=False,
         simulation_mode=False,
         enabled_sides=("left", "right"),
+        network_interface=None,
     ):
         """
         [note] A *_array type parameter requires using a multiprocessing Array, because it needs to be passed to the internal child process
@@ -61,9 +63,9 @@ class Dex3_1_Controller:
             raise ValueError("enabled_sides must contain at least one of ['left', 'right']")
 
         if self.simulation_mode:
-            ChannelFactoryInitialize(2)
+            ensure_channel_factory_initialized(2)
         else:
-            ChannelFactoryInitialize(0, "enx9c69d31ecd9b")
+            ensure_channel_factory_initialized(0, network_interface=network_interface)
 
         # initialize handcmd publisher and handstate subscriber
         self.LeftHandCmb_publisher = (

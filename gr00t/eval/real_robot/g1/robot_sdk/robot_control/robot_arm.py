@@ -10,6 +10,7 @@ from unitree_sdk2py.utils.crc import CRC
 
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowCmd_ as go_LowCmd, LowState_ as go_LowState  # idl for h1
 from unitree_sdk2py.idl.default import unitree_go_msg_dds__LowCmd_
+from robot_sdk.utils.dds import ensure_channel_factory_initialized
 
 import logging_mp
 
@@ -66,7 +67,7 @@ class DataBuffer:
 
 
 class G1_29_ArmController:
-    def __init__(self, motion_mode=False, simulation_mode=False):
+    def __init__(self, motion_mode=False, simulation_mode=False, network_interface=None):
         logger_mp.info("Initialize G1_29_ArmController...")
         self.q_target = np.zeros(14)
         self.tauff_target = np.zeros(14)
@@ -89,9 +90,9 @@ class G1_29_ArmController:
 
         # initialize lowcmd publisher and lowstate subscriber
         if self.simulation_mode:
-            ChannelFactoryInitialize(2)
+            ensure_channel_factory_initialized(2)
         else:
-            ChannelFactoryInitialize(0, "enx9c69d31ecd9b")
+            ensure_channel_factory_initialized(0, network_interface=network_interface)
 
         if self.motion_mode:
             self.lowcmd_publisher = ChannelPublisher(kTopicLowCommand_Motion, hg_LowCmd)

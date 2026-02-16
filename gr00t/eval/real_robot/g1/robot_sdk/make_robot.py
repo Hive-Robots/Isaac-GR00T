@@ -196,8 +196,15 @@ def setup_robot_interface(args: argparse.Namespace) -> dict[str, Any]:
     arm_spec = ARM_CONFIG[args.arm]
     arm_ik = arm_spec["ik_solver"]()
     is_sim = getattr(args, "sim", False)
+    network_interface = getattr(args, "network_interface", None)
     motion_mode = True if not is_sim else getattr(args, "motion", False)
-    arm_ctrl = arm_spec["controller"](motion_mode=motion_mode, simulation_mode=is_sim)
+    arm_kwargs = {
+        "motion_mode": motion_mode,
+        "simulation_mode": is_sim,
+    }
+    if arm_spec["controller"] is G1_29_ArmController:
+        arm_kwargs["network_interface"] = network_interface
+    arm_ctrl = arm_spec["controller"](**arm_kwargs)
 
 
     # ---------- End Effector (optional) ----------
@@ -233,6 +240,7 @@ def setup_robot_interface(args: argparse.Namespace) -> dict[str, Any]:
         }
         if spec["controller"] is Dex3_1_Controller:
             ctrl_kwargs["enabled_sides"] = enabled_sides
+            ctrl_kwargs["network_interface"] = network_interface
 
         ee_ctrl = spec["controller"](left_in, right_in, **ctrl_kwargs)
 

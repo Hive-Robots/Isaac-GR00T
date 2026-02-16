@@ -36,33 +36,24 @@ from pprint import pformat
 import threading
 import time
 from typing import Any, Dict, List, Optional
-import torch
 import draccus
 import numpy as np
 
 from gr00t.policy.server_client import PolicyClient
 
-try:
-    from robot_sdk.make_robot import (
-        process_images_and_observations,
-        setup_image_client as setup_image_client_sdk,
-        setup_robot_interface,
-    )
-    from image_server.image_client import ImageClient
-except ImportError:
-    try:
-        from gr00t.eval.real_robot.g1.robot_sdk.make_robot import (
-            process_images_and_observations,
-            setup_image_client as setup_image_client_sdk,
-            setup_robot_interface,
-        )
-        from gr00t.eval.real_robot.g1.image_server.image_client import ImageClient
-    except ImportError as exc:  # pragma: no cover - real-robot runtime dependency
-        _ROBOT_SDK_IMPORT_ERROR = exc
-    else:
-        _ROBOT_SDK_IMPORT_ERROR = None
-else:
-    _ROBOT_SDK_IMPORT_ERROR = None
+from robot_sdk.make_robot import (
+    process_images_and_observations,
+    setup_image_client as setup_image_client_sdk,
+    setup_robot_interface,
+)
+from robot_sdk.utils.utils import (
+    _action_to_sized_vector,
+    _to_numpy_image,
+    recursive_add_extra_dim,
+    to_list,
+    to_scalar,
+)
+from image_server.image_client import ImageClient
 
 
 ARM_STATE_KEYS = [
@@ -101,56 +92,6 @@ RIGHT_HAND_STATE_KEYS = [
     "kRightHandMiddle0",
     "kRightHandMiddle1",
 ]
-
-
-def recursive_add_extra_dim(obs: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Recursively add an extra dim to arrays or scalars.
-
-    GR00T Policy Server expects:
-        obs: (batch=1, time=1, ...)
-    Calling this function twice achieves that.
-    """
-    for key, val in obs.items():
-        if isinstance(val, np.ndarray):
-            obs[key] = val[np.newaxis, ...]
-        elif isinstance(val, dict):
-            obs[key] = recursive_add_extra_dim(val)
-        else:
-            obs[key] = [val]
-    return obs
-
-def to_scalar(x):
-    if torch is not None and isinstance(x, torch.Tensor):
-        return float(x.detach().cpu().ravel()[0].item())
-    if isinstance(x, np.ndarray):
-        return float(x.ravel()[0])
-    if isinstance(x, (list, tuple)):
-        return float(x[0])
-    return float(x)
-
-def _to_numpy_image(image: Any) -> Optional[np.ndarray]:
-    if image is None:
-        return None
-    if hasattr(image, "detach"):
-        image = image.detach()
-    if hasattr(image, "cpu"):
-        image = image.cpu()
-    if hasattr(image, "numpy"):
-        image = image.numpy()
-    return np.asarray(image)
-
-
-def _action_to_sized_vector(action: np.ndarray, target_len: int) -> np.ndarray:
-    if target_len <= 0:
-        return np.zeros(0, dtype=np.float32)
-    if action.shape[0] == target_len:
-        return action.astype(np.float32, copy=False)
-    out = np.zeros(target_len, dtype=np.float32)
-    copy_len = min(target_len, action.shape[0])
-    out[:copy_len] = action[:copy_len]
-    return out
-
 
 def setup_image_client_for_eval(cfg: "EvalConfig") -> Dict[str, Any]:
     """
@@ -216,6 +157,24 @@ def wait_for_camera_frames(tv_img_array, wrist_img_array=None, image_thread=None
         thread_status,
     )
     return False
+
+
+def cleanup_image_resources(image_info: Optional[Dict[str, Any]]) -> None:
+    """Close/unlink image shared memory segments created by this process."""
+    if not image_info:
+        return
+
+    for shm in image_info.get("shm_resources", []):
+        try:
+            shm.close()
+        except Exception:
+            pass
+        try:
+            shm.unlink()
+        except FileNotFoundError:
+            pass
+        except Exception:
+            pass
 
 
 class G1XRTeleAdapter:
@@ -383,26 +342,14 @@ class EvalConfig:
     sim: bool = False
     motion: bool = False
 
-    # backward-compatible placeholder (not consumed by robot_sdk controllers)
+    # Optional DDS network interface name (e.g., "enx9c69d31ecd9b"); None uses autodetect.
     network_interface: Optional[str] = None
 
 
 @draccus.wrap()
 def eval(cfg: EvalConfig):
-    if _ROBOT_SDK_IMPORT_ERROR is not None:
-        raise RuntimeError(
-            "robot_sdk/unitree_sdk2py runtime is required for G1 eval. "
-            "Ensure the robot_sdk dependencies are installed."
-        ) from _ROBOT_SDK_IMPORT_ERROR
-
     logging.basicConfig(level=logging.INFO)
     logging.info(pformat(asdict(cfg)))
-
-    if cfg.network_interface is not None:
-        logging.warning(
-            "network_interface=%s is currently not consumed by robot_sdk controllers; using their internal DDS init.",
-            cfg.network_interface,
-        )
 
     # --- Setup policy wrapper ---
     spec = spec_from_file_location("modality_config", cfg.modality_config_path)
@@ -494,7 +441,7 @@ def eval(cfg: EvalConfig):
 
                 if pending_actions:
                     action_dict = pending_actions.pop(0)
-                    logging.info("action: %s", action_dict)
+                    #logging.info("action: %s", action_dict)
 
                     # 3. Execute action through robot_sdk arm + EE interfaces
                     _execute_action(
@@ -516,6 +463,8 @@ def eval(cfg: EvalConfig):
 
     except Exception:
         logging.exception("An error occurred during G1 evaluation.")
+    finally:
+        cleanup_image_resources(image_info)
 
 
 if __name__ == "__main__":
