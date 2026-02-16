@@ -28,6 +28,7 @@ Running example:
 """
 
 from dataclasses import asdict, dataclass
+from collections import deque
 from importlib.util import module_from_spec, spec_from_file_location
 import logging
 from multiprocessing.sharedctypes import SynchronizedArray
@@ -363,7 +364,54 @@ def eval(cfg: EvalConfig):
     policy = G1XRTeleAdapter(policy_client, modality_configs)
 
     image_info = None
+    diag_file = None
+    prev_arm_action: Optional[np.ndarray] = None
+    last_action_dict: Optional[Dict[str, float]] = None
+    run_start_time = time.perf_counter()
+    action_queue: deque[Dict[str, float]] = deque()
+    action_queue_lock = threading.Lock()
+    latest_obs_lock = threading.Lock()
+    latest_policy_obs: Dict[str, Optional[Dict[str, Any]]] = {"obs": None}
+    policy_metrics_lock = threading.Lock()
+    policy_metrics = {"last_infer_ms": 0.0}
+    stop_prefetch = threading.Event()
+
+    def _policy_prefetch_loop():
+        while not stop_prefetch.is_set():
+            with action_queue_lock:
+                queue_len = len(action_queue)
+            if queue_len > 0:
+                stop_prefetch.wait(0.002)
+                continue
+
+            with latest_obs_lock:
+                policy_obs_local = latest_policy_obs["obs"]
+            if policy_obs_local is None:
+                stop_prefetch.wait(0.002)
+                continue
+
+            try:
+                t_policy = time.perf_counter()
+                fetched_actions = policy.get_action(policy_obs_local, horizon=cfg.action_horizon)
+                infer_ms = (time.perf_counter() - t_policy) * 1000.0
+                with action_queue_lock:
+                    action_queue.extend(fetched_actions)
+                with policy_metrics_lock:
+                    policy_metrics["last_infer_ms"] = infer_ms
+            except Exception:
+                logging.exception("Policy prefetch failed; retrying.")
+                stop_prefetch.wait(0.05)
+
+    prefetch_thread = threading.Thread(target=_policy_prefetch_loop, daemon=True)
     try:
+        diag_path = f"eval_g1_diagnostics_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+        diag_file = open(diag_path, "w")
+        diag_file.write(
+            "time_since_start_s,loop_elapsed_ms,sleep_time_ms,policy_infer_ms,action_delta_l2,tracking_error_l2,arm_dq_l2,missing_camera,using_hold_last\n"
+        )
+        diag_file.flush()
+        logging.info("Diagnostics CSV: %s", diag_path)
+
         # --- Setup Phase ---
         image_info = setup_image_client_for_eval(cfg)
         robot_interface = setup_robot_interface(cfg)
@@ -406,11 +454,17 @@ def eval(cfg: EvalConfig):
 
         # --- Run Main Loop ---
         logging.info("Starting evaluation loop at %.2f Hz.", cfg.control_hz)
-        pending_actions: List[Dict[str, float]] = []
+        prefetch_thread.start()
         ee_enabled = bool(cfg.ee)
 
         while True:
             loop_start_time = time.perf_counter()
+            missing_camera = False
+            using_hold_last = False
+            with policy_metrics_lock:
+                policy_infer_ms = policy_metrics["last_infer_ms"]
+                policy_metrics["last_infer_ms"] = 0.0
+            action_dict: Optional[Dict[str, float]] = None
 
             # 1. Get Observations
             observation, current_arm_q = process_images_and_observations(
@@ -433,16 +487,24 @@ def eval(cfg: EvalConfig):
 
             if any(policy_obs.get(camera_key) is None for camera_key in policy.camera_keys):
                 logging.warning("Missing camera frame(s); skipping policy/action this cycle.")
-                pending_actions = []
+                missing_camera = True
+                with latest_obs_lock:
+                    latest_policy_obs["obs"] = None
+                with action_queue_lock:
+                    action_queue.clear()
             else:
-                # 2. Query policy (temporal chunk), then execute one action per control cycle
-                if not pending_actions:
-                    pending_actions = policy.get_action(policy_obs, horizon=cfg.action_horizon)
+                with latest_obs_lock:
+                    latest_policy_obs["obs"] = policy_obs
 
-                if pending_actions:
-                    action_dict = pending_actions.pop(0)
-                    #logging.info("action: %s", action_dict)
+                # 2. Consume prefetched action without blocking control loop.
+                with action_queue_lock:
+                    if action_queue:
+                        action_dict = action_queue.popleft()
+                if action_dict is None and last_action_dict is not None:
+                    action_dict = dict(last_action_dict)
+                    using_hold_last = True
 
+                if action_dict is not None:
                     # 3. Execute action through robot_sdk arm + EE interfaces
                     _execute_action(
                         action_dict=action_dict,
@@ -454,6 +516,7 @@ def eval(cfg: EvalConfig):
                         ee_sides=ee_sides,
                         ee_shared_mem=ee_shared_mem,
                     )
+                    last_action_dict = dict(action_dict)
 
             # Maintain frequency
             elapsed = time.perf_counter() - loop_start_time
@@ -461,9 +524,35 @@ def eval(cfg: EvalConfig):
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
+            arm_action_delta_l2 = 0.0
+            arm_tracking_error_l2 = 0.0
+            arm_dq_l2 = float(np.linalg.norm(np.asarray(arm_ctrl.get_current_dual_arm_dq(), dtype=np.float32)))
+            if action_dict is not None:
+                arm_q_now = np.asarray(current_arm_q, dtype=np.float32)
+                arm_action = np.array(
+                    [float(action_dict.get(key, arm_q_now[idx] if idx < arm_q_now.shape[0] else 0.0)) for idx, key in enumerate(ARM_STATE_KEYS)],
+                    dtype=np.float32,
+                )
+                if prev_arm_action is not None:
+                    arm_action_delta_l2 = float(np.linalg.norm(arm_action - prev_arm_action))
+                arm_tracking_error_l2 = float(np.linalg.norm(arm_action - arm_q_now))
+                prev_arm_action = arm_action
+
+            if diag_file is not None:
+                diag_file.write(
+                    f"{time.perf_counter() - run_start_time:.6f},{elapsed * 1000.0:.6f},{max(0.0, sleep_time) * 1000.0:.6f},"
+                    f"{policy_infer_ms:.6f},{arm_action_delta_l2:.6f},{arm_tracking_error_l2:.6f},{arm_dq_l2:.6f},{int(missing_camera)},{int(using_hold_last)}\n"
+                )
+                diag_file.flush()
+
     except Exception:
         logging.exception("An error occurred during G1 evaluation.")
     finally:
+        stop_prefetch.set()
+        if prefetch_thread.is_alive():
+            prefetch_thread.join(timeout=1.0)
+        if diag_file is not None:
+            diag_file.close()
         cleanup_image_resources(image_info)
 
 
