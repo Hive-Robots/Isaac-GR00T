@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from importlib.util import module_from_spec, spec_from_file_location
 import json
 import os
 
@@ -33,6 +34,9 @@ class ServerConfig:
     modality_config_path: str | None = None
     """Path to the modality configuration file"""
 
+    modality_config_name: str | None = None
+    """Variable name for modality config when loading from a Python file"""
+
     execution_horizon: int | None = None
     """Policy execution horizon during inference."""
 
@@ -59,7 +63,7 @@ def main(config: ServerConfig):
     print(f"  Port: {config.port}")
 
     # check if the model path exists
-    if config.model_path.startswith("/") and not os.path.exists(config.model_path):
+    if config.model_path is not None and config.model_path.startswith("/") and not os.path.exists(config.model_path):
         raise FileNotFoundError(f"Model path {config.model_path} does not exist")
 
     # Create and start the server
@@ -76,8 +80,30 @@ def main(config: ServerConfig):
 
             modality_configs = MODALITY_CONFIGS[config.embodiment_tag.value]
         else:
-            with open(config.modality_config_path, "r") as f:
-                modality_configs = json.load(f)
+            if config.modality_config_path.endswith(".py"):
+                spec = spec_from_file_location("modality_config", config.modality_config_path)
+                if spec is None or spec.loader is None:
+                    raise RuntimeError(f"Cannot load modality config from: {config.modality_config_path}")
+                module = module_from_spec(spec)
+                spec.loader.exec_module(module)
+
+                if config.modality_config_name is not None:
+                    modality_configs = getattr(module, config.modality_config_name)
+                else:
+                    candidates = [
+                        value
+                        for value in module.__dict__.values()
+                        if isinstance(value, dict) and {"video", "state", "action", "language"} <= set(value.keys())
+                    ]
+                    if len(candidates) != 1:
+                        raise ValueError(
+                            "Could not uniquely infer modality config from Python file. "
+                            "Please pass --modality-config-name."
+                        )
+                    modality_configs = candidates[0]
+            else:
+                with open(config.modality_config_path, "r") as f:
+                    modality_configs = json.load(f)
         policy = ReplayPolicy(
             dataset_path=config.dataset_path,
             modality_configs=modality_configs,

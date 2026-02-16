@@ -2,11 +2,18 @@
 
 This page lists the primary scripts you run in this repo for finetuning and inference, along with all available CLI arguments and defaults.
 
+All scripts are meant to be run from:
+
+```bash
+cd ~/Isaac-GR00T
+conda activate gr00t
+```
+
 ## Finetuning (single-node)
 Script: `gr00t/experiment/launch_finetune.py`
 Run (example):
 ```bash
-uv run python gr00t/experiment/launch_finetune.py \
+python gr00t/experiment/launch_finetune.py \
   --base-model-path nvidia/GR00T-N1.6-3B \
   --dataset-path demo_data/cube_to_bowl_5 \
   --embodiment-tag SO100 \
@@ -45,7 +52,7 @@ Arguments:
 Script: `gr00t/eval/open_loop_eval.py`
 Run (example):
 ```bash
-uv run python gr00t/eval/open_loop_eval.py \
+python gr00t/eval/open_loop_eval.py \
   --model-path /tmp/gr00t_finetune/checkpoint-10000 \
   --dataset-path demo_data/cube_to_bowl_5/ \
   --embodiment-tag NEW_EMBODIMENT \
@@ -70,7 +77,7 @@ Script: `scripts/deployment/standalone_inference_script.py`
 Run (example):
 
 ```bash
-uv run python scripts/deployment/standalone_inference_script.py \
+python scripts/deployment/standalone_inference_script.py \
   --model-path /tmp/gr00t_finetune/checkpoint-10000 \
   --dataset-path demo_data/robot_sim.PickNPlace/ \
   --embodiment-tag GR1
@@ -99,7 +106,7 @@ Arguments:
 Script: `gr00t/eval/run_gr00t_server.py`
 Run (example):
 ```bash
-uv run python gr00t/eval/run_gr00t_server.py \
+python gr00t/eval/run_gr00t_server.py \
   --embodiment-tag NEW_EMBODIMENT \
   --modality-config-path examples/g1_XRtele/modality_config.py\
   --model-path /mnt/sata1/gr00t16/... \
@@ -122,7 +129,7 @@ Arguments:
 Script: `gr00t/eval/rollout_policy.py`
 Run (example, client against server):
 ```bash
-uv run python gr00t/eval/rollout_policy.py \
+python gr00t/eval/rollout_policy.py \
   --policy-client-host 127.0.0.1 \
   --policy-client-port 5555 \
   --env-name gr1_unified/PosttrainPnPNovelFromPlateToBowlSplitA_GR1ArmsAndWaistFourierHands_Env
@@ -141,7 +148,7 @@ Arguments:
 Or use a robot-specific inference script:
 
 ```bash
-uv run python gr00t/eval/real_robot/g1/eval_g1.py \
+python gr00t/eval/real_robot/g1/eval_g1.py \
   --modality_config_path examples/g1_XRtele/modality_config.py \
   --modality_config_name unitree_g1_xrtele \
   --policy_host 127.0.0.1 \
@@ -160,7 +167,7 @@ Notes:
 **Simulation (server + client rollout)**
 1. Start the policy server with your checkpoint:
 ```bash
-uv run python gr00t/eval/run_gr00t_server.py \
+python gr00t/eval/run_gr00t_server.py \
   --embodiment-tag GR1 \
   --model-path /tmp/gr00t_finetune/checkpoint-10000 \
   --host 0.0.0.0 \
@@ -168,7 +175,7 @@ uv run python gr00t/eval/run_gr00t_server.py \
 ```
 2. Run a simulation client that connects to the server (example rollout entry point):
 ```bash
-uv run python gr00t/eval/rollout_policy.py \
+python gr00t/eval/rollout_policy.py \
   --policy-client-host 127.0.0.1 \
   --policy-client-port 5555 \
   --env-name gr1_unified/PosttrainPnPNovelFromPlateToBowlSplitA_GR1ArmsAndWaistFourierHands_Env

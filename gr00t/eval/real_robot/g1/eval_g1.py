@@ -28,7 +28,6 @@ Running example:
 """
 
 from dataclasses import asdict, dataclass
-from collections import deque
 from importlib.util import module_from_spec, spec_from_file_location
 import logging
 from multiprocessing.sharedctypes import SynchronizedArray
@@ -366,43 +365,8 @@ def eval(cfg: EvalConfig):
     image_info = None
     diag_file = None
     prev_arm_action: Optional[np.ndarray] = None
-    last_action_dict: Optional[Dict[str, float]] = None
+    pending_action_seq: List[Dict[str, float]] = []
     run_start_time = time.perf_counter()
-    action_queue: deque[Dict[str, float]] = deque()
-    action_queue_lock = threading.Lock()
-    latest_obs_lock = threading.Lock()
-    latest_policy_obs: Dict[str, Optional[Dict[str, Any]]] = {"obs": None}
-    policy_metrics_lock = threading.Lock()
-    policy_metrics = {"last_infer_ms": 0.0}
-    stop_prefetch = threading.Event()
-
-    def _policy_prefetch_loop():
-        while not stop_prefetch.is_set():
-            with action_queue_lock:
-                queue_len = len(action_queue)
-            if queue_len > 0:
-                stop_prefetch.wait(0.002)
-                continue
-
-            with latest_obs_lock:
-                policy_obs_local = latest_policy_obs["obs"]
-            if policy_obs_local is None:
-                stop_prefetch.wait(0.002)
-                continue
-
-            try:
-                t_policy = time.perf_counter()
-                fetched_actions = policy.get_action(policy_obs_local, horizon=cfg.action_horizon)
-                infer_ms = (time.perf_counter() - t_policy) * 1000.0
-                with action_queue_lock:
-                    action_queue.extend(fetched_actions)
-                with policy_metrics_lock:
-                    policy_metrics["last_infer_ms"] = infer_ms
-            except Exception:
-                logging.exception("Policy prefetch failed; retrying.")
-                stop_prefetch.wait(0.05)
-
-    prefetch_thread = threading.Thread(target=_policy_prefetch_loop, daemon=True)
     try:
         diag_path = f"eval_g1_diagnostics_{time.strftime('%Y%m%d_%H%M%S')}.csv"
         diag_file = open(diag_path, "w")
@@ -454,16 +418,13 @@ def eval(cfg: EvalConfig):
 
         # --- Run Main Loop ---
         logging.info("Starting evaluation loop at %.2f Hz.", cfg.control_hz)
-        prefetch_thread.start()
         ee_enabled = bool(cfg.ee)
 
         while True:
             loop_start_time = time.perf_counter()
             missing_camera = False
             using_hold_last = False
-            with policy_metrics_lock:
-                policy_infer_ms = policy_metrics["last_infer_ms"]
-                policy_metrics["last_infer_ms"] = 0.0
+            policy_infer_ms = 0.0
             action_dict: Optional[Dict[str, float]] = None
 
             # 1. Get Observations
@@ -488,21 +449,21 @@ def eval(cfg: EvalConfig):
             if any(policy_obs.get(camera_key) is None for camera_key in policy.camera_keys):
                 logging.warning("Missing camera frame(s); skipping policy/action this cycle.")
                 missing_camera = True
-                with latest_obs_lock:
-                    latest_policy_obs["obs"] = None
-                with action_queue_lock:
-                    action_queue.clear()
+                pending_action_seq.clear()
             else:
-                with latest_obs_lock:
-                    latest_policy_obs["obs"] = policy_obs
-
-                # 2. Consume prefetched action without blocking control loop.
-                with action_queue_lock:
-                    if action_queue:
-                        action_dict = action_queue.popleft()
-                if action_dict is None and last_action_dict is not None:
-                    action_dict = dict(last_action_dict)
+                # 2. Execute cached chunk actions; refresh from policy when chunk is exhausted.
+                if pending_action_seq:
                     using_hold_last = True
+                    action_dict = pending_action_seq.pop(0)
+                else:
+                    t_policy = time.perf_counter()
+                    action_seq = policy.get_action(policy_obs, horizon=max(1, cfg.action_horizon))
+                    policy_infer_ms = (time.perf_counter() - t_policy) * 1000.0
+                    if action_seq:
+                        action_dict = action_seq[0]
+                        pending_action_seq = action_seq[1:]
+                    else:
+                        logging.warning("Policy returned empty action sequence; skipping this cycle.")
 
                 if action_dict is not None:
                     # 3. Execute action through robot_sdk arm + EE interfaces
@@ -516,7 +477,6 @@ def eval(cfg: EvalConfig):
                         ee_sides=ee_sides,
                         ee_shared_mem=ee_shared_mem,
                     )
-                    last_action_dict = dict(action_dict)
 
             # Maintain frequency
             elapsed = time.perf_counter() - loop_start_time
@@ -548,9 +508,6 @@ def eval(cfg: EvalConfig):
     except Exception:
         logging.exception("An error occurred during G1 evaluation.")
     finally:
-        stop_prefetch.set()
-        if prefetch_thread.is_alive():
-            prefetch_thread.join(timeout=1.0)
         if diag_file is not None:
             diag_file.close()
         cleanup_image_resources(image_info)
