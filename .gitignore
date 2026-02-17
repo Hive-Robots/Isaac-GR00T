@@ -169,3 +169,5 @@ offline_open_loop_eval_plots/
 
 # CSV files
 *.csv
+# generated convex collision meshes
+gr00t/eval/real_robot/g1/robot_sdk/assets/unitree_hand/meshes/**/*.convex.stl
