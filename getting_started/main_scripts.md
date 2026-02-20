@@ -169,7 +169,9 @@ Notes:
 - For server-client inference in your own code, use `PolicyClient` from `gr00t/policy/server_client.py`.
 
 ## Dataset conversion (`convert_unitree_to_v2`)
-Script: `scripts/lerobot_conversion/convert_unitree_to_v2.py`
+
+It is necessary to convert the scripts from xr_teleoperate to Lerobot V2.1 in order to be trained in gr00t1.6. You can do so with the following script:
+
 Run (example):
 ```bash
 python scripts/lerobot_conversion/convert_unitree_to_v2.py \
@@ -177,12 +179,13 @@ python scripts/lerobot_conversion/convert_unitree_to_v2.py \
   --repo-id your_name/your_dataset \
   --robot-type Unitree_G1_Dex3 \
   --mode video \
-  --fps 25
+  --fps 25 \
+  --push-to-hub
 ```
 Arguments:
 - `--raw-dir` (Path, required). Root directory of the Unitree XR-teleoperate dataset (`data.json` episodes + image files).
 - `--repo-id` (str, required). Output LeRobot dataset id under `HF_LEROBOT_HOME` (format: `user_or_org/dataset_name`).
-- `--robot-type` (str, required). Robot config key from `scripts/lerobot_conversion/constants.py` (for example `Unitree_G1_Dex3`).
+- `--robot-type` (str, required). Robot config key from `scripts/lerobot_conversion/constants.py` (for example `Unitree_G1_Dex3`: Head+ 2 wrist cams, or `Unitree_G1_Dex3_real`:Only head).
 - `--modality-config-path` (Path | None, default: None). Optional JSON modality config to override the hardcoded robot config.
 - `--push-to-hub` (bool, default: False). Upload converted dataset to Hugging Face Hub after conversion.
 - `--mode` (`video` | `image`, default: `video`). For GR00T 1.6, only `video` is supported.
