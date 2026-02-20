@@ -47,6 +47,11 @@ Arguments:
 - `--episode-sampling-rate` (float, default: 0.1). Episode sampling rate.
 - `--num-shards-per-epoch` (int, default: 100000). Number of shards per epoch.
 
+Or train using a bash file:
+
+```bash
+bash examples/GR00T-WholeBodyControl/finetune_g1.sh
+```
 
 ## Open-loop eval (offline, dataset-driven)
 Script: `gr00t/eval/open_loop_eval.py`
