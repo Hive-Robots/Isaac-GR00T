@@ -353,6 +353,7 @@ class EvalConfig:
 
     # Optional DDS network interface name (e.g., "enx9c69d31ecd9b"); None uses autodetect.
     network_interface: Optional[str] = None
+    enable_diagnostics: bool = False
 
 
 @draccus.wrap()
@@ -377,13 +378,14 @@ def eval(cfg: EvalConfig):
     pending_action_seq: List[Dict[str, float]] = []
     run_start_time = time.perf_counter()
     try:
-        diag_path = f"eval_g1_diagnostics_{time.strftime('%Y%m%d_%H%M%S')}.csv"
-        diag_file = open(diag_path, "w")
-        diag_file.write(
-            "time_since_start_s,loop_elapsed_ms,sleep_time_ms,policy_infer_ms,action_delta_l2,tracking_error_l2,arm_dq_l2,missing_camera,using_hold_last\n"
-        )
-        diag_file.flush()
-        logging.info("Diagnostics CSV: %s", diag_path)
+        if cfg.enable_diagnostics:
+            diag_path = f"eval_g1_diagnostics_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+            diag_file = open(diag_path, "w")
+            diag_file.write(
+                "time_since_start_s,loop_elapsed_ms,sleep_time_ms,policy_infer_ms,action_delta_l2,tracking_error_l2,arm_dq_l2,missing_camera,using_hold_last\n"
+            )
+            diag_file.flush()
+            logging.info("Diagnostics CSV: %s", diag_path)
 
         # --- Setup Phase ---
         image_info = setup_image_client_for_eval(cfg)
