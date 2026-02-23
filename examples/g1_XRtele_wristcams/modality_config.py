@@ -7,7 +7,7 @@ from gr00t.data.types import ActionRepresentation
 from gr00t.data.types import ActionType
 
 # Modality configuration for the Unitree G1 dataset (xr_tele) version.
-unitree_g1_xrtele = {
+unitree_g1_xrtele_wristcams = {
     "video": ModalityConfig(
         delta_indices=[0],
         modality_keys=[
@@ -96,4 +96,4 @@ unitree_g1_xrtele = {
     ),
 }
 
-register_modality_config(unitree_g1_xrtele, embodiment_tag=EmbodimentTag.NEW_EMBODIMENT)
+register_modality_config(unitree_g1_xrtele_wristcams, embodiment_tag=EmbodimentTag.NEW_EMBODIMENT)

@@ -102,7 +102,7 @@ RIGHT_HAND_STATE_KEYS = [
 ]
 
 
-def setup_image_client_for_eval(cfg: "EvalConfig") -> Dict[str, Any]:
+def setup_image_client_for_eval(cfg: "EvalConfig", camera_keys: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     Match eval_g1_lerobot setup style while keeping runtime image overrides
     in eval_g1 (without changing robot_sdk internals).
@@ -114,25 +114,47 @@ def setup_image_client_for_eval(cfg: "EvalConfig") -> Dict[str, Any]:
     tv_img_shm = shared_memory.SharedMemory(create=True, size=np.prod(tv_img_shape) * np.uint8().itemsize)
     tv_img_array = np.ndarray(tv_img_shape, dtype=np.uint8, buffer=tv_img_shm.buf)
 
-    img_client = ImageClient(
-        tv_img_shape=tv_img_shape,
-        tv_img_shm_name=tv_img_shm.name,
-        server_address=cfg.image_server_address,
-        port=cfg.image_server_port,
-    )
+    has_wrist_cam = bool(camera_keys) and any("wrist" in k for k in camera_keys)
+    wrist_img_shape = None
+    wrist_img_shm = None
+    wrist_img_array = None
+
+    if has_wrist_cam:
+        wrist_img_shape = (
+            int(cfg.wrist_image_height),
+            int(cfg.wrist_image_width) * 2,
+            3,
+        )
+        wrist_img_shm = shared_memory.SharedMemory(create=True, size=np.prod(wrist_img_shape) * np.uint8().itemsize)
+        wrist_img_array = np.ndarray(wrist_img_shape, dtype=np.uint8, buffer=wrist_img_shm.buf)
+        img_client = ImageClient(
+            tv_img_shape=tv_img_shape,
+            tv_img_shm_name=tv_img_shm.name,
+            wrist_img_shape=wrist_img_shape,
+            wrist_img_shm_name=wrist_img_shm.name,
+            server_address=cfg.image_server_address,
+            port=cfg.image_server_port,
+        )
+    else:
+        img_client = ImageClient(
+            tv_img_shape=tv_img_shape,
+            tv_img_shm_name=tv_img_shm.name,
+            server_address=cfg.image_server_address,
+            port=cfg.image_server_port,
+        )
     image_receive_thread = threading.Thread(target=img_client.receive_process, daemon=True)
     image_receive_thread.daemon = True
     image_receive_thread.start()
 
     return {
         "tv_img_array": tv_img_array,
-        "wrist_img_array": None,
+        "wrist_img_array": wrist_img_array,
         "tv_img_shape": tv_img_shape,
-        "wrist_img_shape": None,
+        "wrist_img_shape": wrist_img_shape,
         "is_binocular": False,
-        "has_wrist_cam": False,
+        "has_wrist_cam": has_wrist_cam,
         "image_thread": image_receive_thread,
-        "shm_resources": [tv_img_shm],
+        "shm_resources": [tv_img_shm, wrist_img_shm] if wrist_img_shm is not None else [tv_img_shm],
     }
 
 
@@ -343,6 +365,8 @@ class EvalConfig:
     image_server_port: int = 5555
     head_image_height: int = 480
     head_image_width: int = 640
+    wrist_image_height: int = 480
+    wrist_image_width: int = 640
 
     # robot_sdk setup fields
     arm: str = "G1_29"
@@ -388,7 +412,7 @@ def eval(cfg: EvalConfig):
             logging.info("Diagnostics CSV: %s", diag_path)
 
         # --- Setup Phase ---
-        image_info = setup_image_client_for_eval(cfg)
+        image_info = setup_image_client_for_eval(cfg, camera_keys=policy.camera_keys)
         robot_interface = setup_robot_interface(cfg)
 
         arm_ctrl, arm_ik, ee_shared_mem, ee_dof, ee_sides = (
