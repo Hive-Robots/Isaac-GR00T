@@ -54,10 +54,43 @@ RUN python -m pip install --upgrade pip setuptools wheel \
 
 COPY external_dependencies/GR00T-WholeBodyControl/external_dependencies/unitree_sdk2_python /opt/unitree_sdk2_python
 
+RUN mkdir -p /tmp/crc_build \
+    && cat > /tmp/crc_build/crc_core.c <<'EOF'
+#include <stdint.h>
+uint32_t crc32_core(const uint32_t *data, uint32_t len) {
+    uint32_t crc = 0xFFFFFFFFu;
+    const uint32_t polynomial = 0x04c11db7u;
+    for (uint32_t i = 0; i < len; ++i) {
+        uint32_t bit = 1u << 31;
+        uint32_t current = data[i];
+        for (int b = 0; b < 32; ++b) {
+            if (crc & 0x80000000u) {
+                crc = (crc << 1) ^ polynomial;
+            } else {
+                crc = (crc << 1);
+            }
+            if (current & bit) {
+                crc ^= polynomial;
+            }
+            bit >>= 1;
+        }
+    }
+    return crc;
+}
+EOF
+RUN arch="$(dpkg --print-architecture)" \
+    && gcc -shared -fPIC -O3 /tmp/crc_build/crc_core.c -o /tmp/crc_build/libcrc.so \
+    && case "${arch}" in \
+        arm64) cp /tmp/crc_build/libcrc.so /opt/unitree_sdk2_python/unitree_sdk2py/utils/lib/crc_aarch64.so ;; \
+        amd64) cp /tmp/crc_build/libcrc.so /opt/unitree_sdk2_python/unitree_sdk2py/utils/lib/crc_amd64.so ;; \
+        *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
+    esac \
+    && rm -rf /tmp/crc_build
+
 RUN python -m pip install --no-deps -e /opt/unitree_sdk2_python \
     && rm -rf /tmp/requirements.txt /tmp/requirements.pip.txt
 
-RUN python -c "import pathlib; p=pathlib.Path('/opt/unitree_sdk2_python/unitree_sdk2py/utils/lib/crc_aarch64.so'); b=p.read_bytes()[:4]; assert b==b'\\x7fELF', f'Invalid ELF header in {p}: {b!r}'"
+RUN python -c "import pathlib,platform; p=pathlib.Path('/opt/unitree_sdk2_python/unitree_sdk2py/utils/lib/crc_aarch64.so' if platform.machine()=='aarch64' else '/opt/unitree_sdk2_python/unitree_sdk2py/utils/lib/crc_amd64.so'); b=p.read_bytes()[:4]; assert b==b'\\x7fELF', f'Invalid ELF header in {p}: {b!r}'"
 
 RUN cat > /usr/local/bin/g1-entrypoint.sh <<'EOF'
 #!/usr/bin/env bash
