@@ -1,18 +1,35 @@
 import casadi
-import meshcat.geometry as mg
 import numpy as np
 import pinocchio as pin
 import time
 from pinocchio import casadi as cpin
-from pinocchio.visualize import MeshcatVisualizer
 from pathlib import Path
 from robot_sdk.utils.weighted_moving_filter import WeightedMovingFilter
 
 import logging_mp
 
+try:
+    import meshcat.geometry as mg
+except ImportError:
+    mg = None
+
+try:
+    from pinocchio.visualize import MeshcatVisualizer
+except ImportError:
+    MeshcatVisualizer = None
+
 logger_mp = logging_mp.get_logger(__name__)
 _ROBOT_SDK_ROOT = Path(__file__).resolve().parents[1]
 _G1_ASSETS_DIR = _ROBOT_SDK_ROOT / "assets" / "g1"
+
+
+def _require_meshcat_visualization() -> None:
+    if mg is not None and MeshcatVisualizer is not None:
+        return
+    raise ImportError(
+        "Visualization=True requires optional meshcat dependencies. "
+        "Install 'meshcat' and 'meshcat-shapes', or use Visualization=False."
+    )
 
 
 class G1_29_ArmIK:
@@ -157,6 +174,7 @@ class G1_29_ArmIK:
         self.vis = None
 
         if self.Visualization:
+            _require_meshcat_visualization()
             # Initialize the Meshcat visualizer for visualization
             self.vis = MeshcatVisualizer(
                 self.reduced_robot.model, self.reduced_robot.collision_model, self.reduced_robot.visual_model
@@ -407,6 +425,7 @@ class G1_23_ArmIK:
         self.vis = None
 
         if self.Visualization:
+            _require_meshcat_visualization()
             # Initialize the Meshcat visualizer for visualization
             self.vis = MeshcatVisualizer(
                 self.reduced_robot.model, self.reduced_robot.collision_model, self.reduced_robot.visual_model
@@ -682,6 +701,7 @@ class H1_2_ArmIK:
         self.vis = None
 
         if self.Visualization:
+            _require_meshcat_visualization()
             # Initialize the Meshcat visualizer for visualization
             self.vis = MeshcatVisualizer(
                 self.reduced_robot.model, self.reduced_robot.collision_model, self.reduced_robot.visual_model
@@ -943,6 +963,7 @@ class H1_ArmIK:
         self.vis = None
 
         if self.Visualization:
+            _require_meshcat_visualization()
             # Initialize the Meshcat visualizer for visualization
             self.vis = MeshcatVisualizer(
                 self.reduced_robot.model, self.reduced_robot.collision_model, self.reduced_robot.visual_model

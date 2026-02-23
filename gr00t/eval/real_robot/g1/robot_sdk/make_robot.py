@@ -3,7 +3,10 @@ from typing import Any
 import numpy as np
 import argparse
 import threading
-import torch
+try:
+    import torch
+except ImportError:
+    torch = None
 from image_server.image_client import ImageClient
 from robot_sdk.robot_control.robot_arm import (
     G1_29_ArmController,
@@ -305,11 +308,19 @@ def process_images_and_observations(
     if has_wrist_cam and current_wrist_image is not None:
         left_wrist_cam = current_wrist_image[:, : wrist_img_shape[1] // 2]
         right_wrist_cam = current_wrist_image[:, wrist_img_shape[1] // 2 :]
+
+    def _wrap_image_array(image: np.ndarray | None):
+        if image is None:
+            return None
+        if torch is None:
+            return image
+        return torch.from_numpy(image)
+
     observation = {
-        "observation.images.cam_left_high": torch.from_numpy(left_top_cam),
-        "observation.images.cam_right_high": torch.from_numpy(right_top_cam) if is_binocular else None,
-        "observation.images.cam_left_wrist": torch.from_numpy(left_wrist_cam) if has_wrist_cam else None,
-        "observation.images.cam_right_wrist": torch.from_numpy(right_wrist_cam) if has_wrist_cam else None,
+        "observation.images.cam_left_high": _wrap_image_array(left_top_cam),
+        "observation.images.cam_right_high": _wrap_image_array(right_top_cam) if is_binocular else None,
+        "observation.images.cam_left_wrist": _wrap_image_array(left_wrist_cam) if has_wrist_cam else None,
+        "observation.images.cam_right_wrist": _wrap_image_array(right_wrist_cam) if has_wrist_cam else None,
     }
     current_arm_q = arm_ctrl.get_current_dual_arm_q()
 

@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 
 
 class WeightedMovingFilter:
@@ -41,6 +40,7 @@ class WeightedMovingFilter:
 
 def visualize_filter_comparison(filter_params, steps):
     import time
+    import matplotlib.pyplot as plt
 
     t = np.linspace(0, 4 * np.pi, steps)
     original_data = np.array(
