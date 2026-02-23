@@ -1,4 +1,5 @@
-FROM nvcr.io/nvidia/pytorch:25.04-py3
+ARG BASE_IMAGE=nvcr.io/nvidia/pytorch:25.04-py3
+FROM ${BASE_IMAGE}
 
 ENV NVIDIA_DRIVER_CAPABILITIES=graphics,utility,compute
 
@@ -9,12 +10,19 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip install --upgrade pip setuptools
 RUN pip install uv
-RUN sed -i s/dill==0.3.9/dill==0.3.8/g /etc/pip/constraint.txt
-RUN sed -i s/scipy==1.15.2/scipy==1.15.3/g /etc/pip/constraint.txt
-RUN pip install imageio h5py boto3 transformers[torch] deepspeed timm peft diffusers wandb tianshou dm_tree openai albumentations==1.4.18 decord==0.6.0 torchcodec==0.4.0
+RUN if [ -f /etc/pip/constraint.txt ]; then sed -i s/dill==0.3.9/dill==0.3.8/g /etc/pip/constraint.txt; fi
+RUN if [ -f /etc/pip/constraint.txt ]; then sed -i s/scipy==1.15.2/scipy==1.15.3/g /etc/pip/constraint.txt; fi
+RUN set -eux; \
+    pip install imageio h5py boto3 transformers[torch] deepspeed timm peft diffusers wandb tianshou dm_tree openai albumentations==1.4.18; \
+    arch="$(uname -m)"; \
+    if [ "$arch" = "x86_64" ] || [ "$arch" = "amd64" ]; then \
+        pip install decord==0.6.0 torchcodec==0.4.0; \
+    else \
+        echo "Skipping decord/torchcodec on $arch (no stable PyPI wheel support)."; \
+    fi
 RUN mkdir -p /opt
 RUN cd /opt && git clone https://github.com/facebookresearch/pytorch3d.git
-RUN cd /opt/pytorch3d && pip install .
+RUN cd /opt/pytorch3d && pip install --no-build-isolation .
 
 COPY src/gr00t/ /workspace/gr00t/
 RUN cd /workspace/gr00t && uv sync && uv pip install -e .
