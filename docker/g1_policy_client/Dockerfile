@@ -57,6 +57,38 @@ COPY external_dependencies/GR00T-WholeBodyControl/external_dependencies/unitree_
 RUN python -m pip install --no-deps -e /opt/unitree_sdk2_python \
     && rm -rf /tmp/requirements.txt /tmp/requirements.pip.txt
 
+RUN python -c "import pathlib; p=pathlib.Path('/opt/unitree_sdk2_python/unitree_sdk2py/utils/lib/crc_aarch64.so'); b=p.read_bytes()[:4]; assert b==b'\\x7fELF', f'Invalid ELF header in {p}: {b!r}'"
+
+RUN cat > /usr/local/bin/g1-entrypoint.sh <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# run.sh injects a bind-mounted unitree_sdk2_python path into PYTHONPATH.
+# Prefer the image-installed SDK at /opt to avoid host-side binary mismatches.
+if [[ -n "${PYTHONPATH:-}" ]]; then
+    filtered=""
+    IFS=':' read -r -a path_items <<< "${PYTHONPATH}"
+    for p in "${path_items[@]}"; do
+        [[ -z "${p}" ]] && continue
+        if [[ "${p}" == *"/unitree_sdk2_python"* ]]; then
+            continue
+        fi
+        if [[ -z "${filtered}" ]]; then
+            filtered="${p}"
+        else
+            filtered="${filtered}:${p}"
+        fi
+    done
+    export PYTHONPATH="${filtered:-/workspace/gr00t}"
+else
+    export PYTHONPATH="/workspace/gr00t"
+fi
+
+exec "$@"
+EOF
+
+RUN chmod +x /usr/local/bin/g1-entrypoint.sh
+
 WORKDIR ${WORKSPACE}
 
 # Copy only the codepaths needed by eval_g1/eval_g1_loop.
@@ -64,4 +96,5 @@ COPY gr00t ${WORKSPACE}/gr00t
 COPY examples/g1_XRtele ${WORKSPACE}/examples/g1_XRtele
 COPY examples/g1_XRtele_wristcams ${WORKSPACE}/examples/g1_XRtele_wristcams
 
+ENTRYPOINT ["/usr/local/bin/g1-entrypoint.sh"]
 CMD ["/bin/bash"]
