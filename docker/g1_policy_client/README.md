@@ -41,7 +41,9 @@ Use:
 
 ```bash
 python gr00t/eval/run_gr00t_server.py \
-  --model-path <MODEL_PATH> \
+  --embodiment-tag NEW_EMBODIMENT \
+  --modality-config-path examples/g1_XRtele/modality_config.py\
+  --model-path /mnt/sata1/gr00t16/... \
   --host 0.0.0.0 \
   --port 5555
 ```
@@ -70,22 +72,7 @@ Pick the Ethernet IP on the same subnet (typically `192.168.123.222` or `192.168
 
 ## Eval Commands
 
-Run eval directly:
-
-```bash
-bash run.sh python gr00t/eval/real_robot/g1/eval_g1.py \
-  --modality_config_path examples/g1_XRtele/modality_config.py \
-  --modality_config_name unitree_g1_xrtele \
-  --policy_host <YOUR_COMPUTER_ETHERNET_IP> \
-  --policy_port 5555 \
-  --action_horizon 8 \
-  --control_hz 25 \
-  --network_interface eth0 \
-  --image_server_address 127.0.0.1 \
-  --image_server_port 5555
-```
-
-Loop variant:
+Run loop eval directly:
 
 ```bash
 bash run.sh python gr00t/eval/real_robot/g1/eval_g1_loop.py \
@@ -100,29 +87,10 @@ bash run.sh python gr00t/eval/real_robot/g1/eval_g1_loop.py \
   --image_server_port 5555
 ```
 
+(You can also run normal eval_g1)
+
 ## Notes
 
 - `run.sh` uses `--network host` so DDS and policy/image sockets can talk to robot/network services.
 - If policy server is remote (your computer), `--policy_host` must be your computer IP, not `127.0.0.1`.
 - The image installs only runtime dependencies required by the two eval scripts and the local G1 robot SDK path.
-
-## Troubleshooting
-
-### `ImportError: cannot import name 'b2' from partially initialized module 'unitree_sdk2py'`
-
-This indicates a broken/non-editable `unitree_sdk2py` install where namespace subpackages are missing.
-
-Fix:
-
-```bash
-cd docker/g1_policy_client
-bash build.sh --no-cache
-```
-
-Then run eval again with `bash run.sh ...`.
-
-One-shot fix for an already running container:
-
-```bash
-python -m pip install --no-deps -e /workspace/gr00t/external_dependencies/GR00T-WholeBodyControl/external_dependencies/unitree_sdk2_python
-```

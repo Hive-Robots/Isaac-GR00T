@@ -131,8 +131,23 @@ Arguments:
 - `--use-sim-policy-wrapper` (bool, default: False). Wrap policy with sim wrapper.
 
 ### Client-side rollout against server or local model
-Script: `gr00t/eval/rollout_policy.py`
-Run (example, client against server):
+Use a robot-specific inference script:
+
+```bash
+python gr00t/eval/real_robot/g1/eval_g1_loop.py \
+  --modality_config_path examples/g1_XRtele/modality_config.py \
+  --modality_config_name unitree_g1_xrtele \
+  --policy_host 127.0.0.1 \
+  --policy_port 5555 \
+  --action_horizon 8 \
+  --control_hz 25 \
+  --network_interface enx9c69d31ecd9b
+
+```
+
+You can check `/docker/g1_policy_client` for more information on running the `eval_g1` code directly on the robot.
+
+To run a simulated environment:
 ```bash
 python gr00t/eval/rollout_policy.py \
   --policy-client-host 127.0.0.1 \
@@ -149,20 +164,6 @@ Arguments:
 - `--n-envs` (int, default: 8). Number of parallel environments.
 - `--n-action-steps` (int, default: 8). Action steps per policy call.
 
-
-Or use a robot-specific inference script:
-
-```bash
-python gr00t/eval/real_robot/g1/eval_g1.py \
-  --modality_config_path examples/g1_XRtele/modality_config.py \
-  --modality_config_name unitree_g1_xrtele \
-  --policy_host 127.0.0.1 \
-  --policy_port 5555 \
-  --action_horizon 8 \
-  --control_hz 25 \
-  --network_interface enx9c69d31ecd9b
-
-```
 
 Notes:
 - These CLIs are defined via `tyro` dataclass parsing or `argparse`. Run `--help` for tyro/argparse output.
