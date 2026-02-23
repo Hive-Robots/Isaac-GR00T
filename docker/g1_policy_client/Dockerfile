@@ -34,10 +34,10 @@ RUN python -m pip install --upgrade pip setuptools wheel \
     && python -m pip install -r /tmp/requirements.txt \
     && python -m pip install cyclonedds==0.10.2
 
-COPY external_dependencies/GR00T-WholeBodyControl/external_dependencies/unitree_sdk2_python /tmp/unitree_sdk2_python
+COPY external_dependencies/GR00T-WholeBodyControl/external_dependencies/unitree_sdk2_python /opt/unitree_sdk2_python
 
-RUN python -m pip install --no-deps /tmp/unitree_sdk2_python \
-    && rm -rf /tmp/unitree_sdk2_python /tmp/requirements.txt
+RUN python -m pip install --no-deps -e /opt/unitree_sdk2_python \
+    && rm -rf /tmp/requirements.txt
 
 WORKDIR ${WORKSPACE}
 

@@ -105,3 +105,24 @@ bash run.sh python gr00t/eval/real_robot/g1/eval_g1_loop.py \
 - `run.sh` uses `--network host` so DDS and policy/image sockets can talk to robot/network services.
 - If policy server is remote (your computer), `--policy_host` must be your computer IP, not `127.0.0.1`.
 - The image installs only runtime dependencies required by the two eval scripts and the local G1 robot SDK path.
+
+## Troubleshooting
+
+### `ImportError: cannot import name 'b2' from partially initialized module 'unitree_sdk2py'`
+
+This indicates a broken/non-editable `unitree_sdk2py` install where namespace subpackages are missing.
+
+Fix:
+
+```bash
+cd docker/g1_policy_client
+bash build.sh --no-cache
+```
+
+Then run eval again with `bash run.sh ...`.
+
+One-shot fix for an already running container:
+
+```bash
+python -m pip install --no-deps -e /workspace/gr00t/external_dependencies/GR00T-WholeBodyControl/external_dependencies/unitree_sdk2_python
+```
