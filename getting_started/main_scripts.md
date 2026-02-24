@@ -91,8 +91,70 @@ Arguments:
 - `--save-plot-path` (str | None, default: None). Path to save plot. By default saves at /mnt/open_loop_eval
 - `--modality-keys` (list[str] | None, default: None). Modality keys to plot (if None, plots all).
 
+## Inference client-server
+### Server
+Script: `gr00t/eval/run_gr00t_server.py`
+Run (example):
+```bash
+python gr00t/eval/run_gr00t_server.py \
+  --embodiment-tag NEW_EMBODIMENT \
+  --modality-config-path examples/g1_XRtele/modality_config.py\
+  --model-path /mnt/sata1/gr00t16/... \
+  --host 0.0.0.0 \
+  --port 5555
+```
+Arguments:
+- `--model-path` (str | None, default: None). Model checkpoint path. Required unless using `--dataset-path`.
+- `--embodiment-tag` (EmbodimentTag, default: `NEW_EMBODIMENT`). Embodiment tag.
+- `--device` (str, default: `cuda`). Device string (e.g., `cuda`, `cuda:0`, `cpu`).
+- `--dataset-path` (str | None, default: None). Dataset path for replay mode.
+- `--modality-config-path` (str | None, default: None). Modality config file (JSON) for replay mode.
+- `--execution-horizon` (int | None, default: None). Policy execution horizon for replay mode.
+- `--host` (str, default: `0.0.0.0`). Host address.
+- `--port` (int, default: 5555). Port.
+- `--strict` (bool, default: True). Enforce strict input/output validation.
+- `--use-sim-policy-wrapper` (bool, default: False). Wrap policy with sim wrapper.
 
-## Inference (standalone / local)
+If you are debugging, it is recommended to use the `dataset-path` argument instead of the `model-path`. That way it will replay a recorded episode rather than calculating actions.
+
+### Client-side rollout against server or local model
+Use a robot-specific inference script:
+
+```bash
+python gr00t/eval/real_robot/g1/eval_g1_loop.py \
+  --modality_config_path examples/g1_XRtele/modality_config.py \
+  --modality_config_name unitree_g1_xrtele \
+  --policy_host 127.0.0.1 \
+  --policy_port 5555 \
+  --action_horizon 8 \
+  --control_hz 25 \
+  --network_interface enx9c69d31ecd9b
+
+```
+
+You can check [`docker/g1_policy_client`](../docker/g1_policy_client/README.md) for more information on running the `eval_g1` code directly on the robot.
+
+## Other Inference (Local &/or simulation)
+
+To run a simulated environment:
+```bash
+python gr00t/eval/rollout_policy.py \
+  --policy-client-host 127.0.0.1 \
+  --policy-client-port 5555 \
+  --env-name gr1_unified/PosttrainPnPNovelFromPlateToBowlSplitA_GR1ArmsAndWaistFourierHands_Env
+```
+Arguments:
+- `--max-episode-steps` (int, default: 504). Max steps per episode.
+- `--n-episodes` (int, default: 50). Number of episodes to run.
+- `--model-path` (str, default: ""). Local model path for direct inference (mutually exclusive with client args).
+- `--policy-client-host` (str, default: ""). Policy server host (use with `--policy-client-port`).
+- `--policy-client-port` (int | None, default: None). Policy server port.
+- `--env-name` (str, default: `gr1_unified/PosttrainPnPNovelFromPlateToBowlSplitA_GR1ArmsAndWaistFourierHands_Env`). Env name.
+- `--n-envs` (int, default: 8). Number of parallel environments.
+- `--n-action-steps` (int, default: 8). Action steps per policy call.
+
+### Inference (standalone / local)
+! Not recommended! It is better to use client-server even if they are within the same pc.
 Script: `scripts/deployment/standalone_inference_script.py`
 Run (example):
 
@@ -120,64 +182,6 @@ Arguments:
 - `--skip-timing-steps` (int, default: 1). Skip initial steps for timing stats.
 - `--get-performance-stats` (bool, default: True). Aggregate and summarize timing/accuracy stats.
 - `--seed` (int, default: 42). Random seed.
-
-## Inference client-server
-### Server
-Script: `gr00t/eval/run_gr00t_server.py`
-Run (example):
-```bash
-python gr00t/eval/run_gr00t_server.py \
-  --embodiment-tag NEW_EMBODIMENT \
-  --modality-config-path examples/g1_XRtele/modality_config.py\
-  --model-path /mnt/sata1/gr00t16/... \
-  --host 0.0.0.0 \
-  --port 5555
-```
-Arguments:
-- `--model-path` (str | None, default: None). Model checkpoint path. Required unless using `--dataset-path`.
-- `--embodiment-tag` (EmbodimentTag, default: `NEW_EMBODIMENT`). Embodiment tag.
-- `--device` (str, default: `cuda`). Device string (e.g., `cuda`, `cuda:0`, `cpu`).
-- `--dataset-path` (str | None, default: None). Dataset path for replay mode.
-- `--modality-config-path` (str | None, default: None). Modality config file (JSON) for replay mode.
-- `--execution-horizon` (int | None, default: None). Policy execution horizon for replay mode.
-- `--host` (str, default: `0.0.0.0`). Host address.
-- `--port` (int, default: 5555). Port.
-- `--strict` (bool, default: True). Enforce strict input/output validation.
-- `--use-sim-policy-wrapper` (bool, default: False). Wrap policy with sim wrapper.
-
-### Client-side rollout against server or local model
-Use a robot-specific inference script:
-
-```bash
-python gr00t/eval/real_robot/g1/eval_g1_loop.py \
-  --modality_config_path examples/g1_XRtele/modality_config.py \
-  --modality_config_name unitree_g1_xrtele \
-  --policy_host 127.0.0.1 \
-  --policy_port 5555 \
-  --action_horizon 8 \
-  --control_hz 25 \
-  --network_interface enx9c69d31ecd9b
-
-```
-
-You can check [`docker/g1_policy_client`](../docker/g1_policy_client/README.md) for more information on running the `eval_g1` code directly on the robot.
-
-To run a simulated environment:
-```bash
-python gr00t/eval/rollout_policy.py \
-  --policy-client-host 127.0.0.1 \
-  --policy-client-port 5555 \
-  --env-name gr1_unified/PosttrainPnPNovelFromPlateToBowlSplitA_GR1ArmsAndWaistFourierHands_Env
-```
-Arguments:
-- `--max-episode-steps` (int, default: 504). Max steps per episode.
-- `--n-episodes` (int, default: 50). Number of episodes to run.
-- `--model-path` (str, default: ""). Local model path for direct inference (mutually exclusive with client args).
-- `--policy-client-host` (str, default: ""). Policy server host (use with `--policy-client-port`).
-- `--policy-client-port` (int | None, default: None). Policy server port.
-- `--env-name` (str, default: `gr1_unified/PosttrainPnPNovelFromPlateToBowlSplitA_GR1ArmsAndWaistFourierHands_Env`). Env name.
-- `--n-envs` (int, default: 8). Number of parallel environments.
-- `--n-action-steps` (int, default: 8). Action steps per policy call.
 
 
 Notes:
