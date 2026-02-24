@@ -1,6 +1,6 @@
 # G1 Policy Client Container
 
-Minimal Docker image for running:
+Minimal Docker image for running the inference client directly on the robot:
 - `gr00t/eval/real_robot/g1/eval_g1.py`
 - `gr00t/eval/real_robot/g1/eval_g1_loop.py`
 
@@ -53,24 +53,9 @@ python gr00t/eval/run_gr00t_server.py \
 Use:
 - `--network_interface`: robot NIC carrying `192.168.123.164` (often `eth0`)
 - `--image_server_address 127.0.0.1` (or `192.168.123.164`)
-- `--image_server_port 5556` (matches `image_server.py` default)
+- `--image_server_port 5555` (matches `image_server.py` default)
 - `--policy_host <YOUR_COMPUTER_ETHERNET_IP>`
 - `--policy_port 5555`
-
-Find robot interface. Run this line where you run the eval code:
-```bash
-ip -br addr | grep 192.168.123.164
-```
-(Normally is `eth0`)
-
-Find computer IP for `--policy_host`. Run this line where you run the policy server:
-```bash
-ip -br addr
-```
-
-Pick the Ethernet IP on the same subnet (typically `192.168.123.222` or `192.168.123.x`).
-
-## Eval Commands
 
 Run loop eval directly:
 
@@ -80,7 +65,7 @@ bash run.sh python gr00t/eval/real_robot/g1/eval_g1_loop.py \
   --modality_config_name unitree_g1_xrtele \
   --policy_host 192.168.123.222 \
   --policy_port 5555 \
-  --action_horizon 8 \
+  --action_horizon 16 \
   --control_hz 25 \
   --network_interface eth0 \
   --image_server_address 127.0.0.1 \
@@ -88,6 +73,19 @@ bash run.sh python gr00t/eval/real_robot/g1/eval_g1_loop.py \
 ```
 
 (You can also run normal eval_g1)
+
+Find robot interface. Run this line where you run the eval code:
+```bash
+ip -br addr | grep 192.168.123.164
+```
+(Normally is `eth0`)
+
+Find computer IP for `--policy_host` on robot side. Run this line where you run the policy server:
+```bash
+ip -br addr
+```
+
+Pick the Ethernet IP on the same subnet (typically `192.168.123.222` or `192.168.123.x`). If you are using wifi, choose the wifi IP (typically `10.10.0.139`)
 
 ## Notes
 

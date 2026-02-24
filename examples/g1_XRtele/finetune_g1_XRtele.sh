@@ -35,7 +35,6 @@ torchrun --nproc_per_node=$NUM_GPUS --master_port=29500 \
     --embodiment_tag NEW_EMBODIMENT \
     --num_gpus $NUM_GPUS \
     --output_dir /mnt/sata1/gr00t16/g1_finetune/pick_toys_1cam_prompt2__bs32_lr1e4_shxep10000_g1 \
-    --save_total_limit 5 \
     --max_steps 10000 \
     --save_steps 1000 \
     --save-total-limit 3 \

@@ -97,6 +97,8 @@ def _load_modality_config(modality_config_path: Path) -> tuple[RobotConfig, dict
         camera_to_image_key=camera_to_image_key,
         json_state_data_name=json_state_data_name,
         json_action_data_name=json_action_data_name,
+        state_names=state_keys,
+        action_names=action_keys,
     )
     return robot_config, modality
 
@@ -334,7 +336,8 @@ def _write_episodes(episode_lengths: list[int], episode_tasks: list[str], meta_d
 
 
 def _write_modality(
-    motors: list[str],
+    state_names: list[str],
+    action_names: list[str],
     cameras: list[str],
     meta_dir: Path,
     *,
@@ -343,8 +346,8 @@ def _write_modality(
     modality = modality_override
     if modality is None:
         modality = {
-            "state": {name: {"start": i, "end": i + 1} for i, name in enumerate(motors)},
-            "action": {name: {"start": i, "end": i + 1} for i, name in enumerate(motors)},
+            "state": {name: {"start": i, "end": i + 1} for i, name in enumerate(state_names)},
+            "action": {name: {"start": i, "end": i + 1} for i, name in enumerate(action_names)},
             "video": {cam: {"original_key": f"observation.images.{cam}"} for cam in cameras},
             "annotation": {"human.task_description": {"original_key": "task_index"}},
         }
@@ -380,7 +383,6 @@ def _write_info(
     meta_dir: Path,
     *,
     robot_type: str,
-    motors: list[str],
     cameras: list[str],
     state_dim: int | None = None,
     action_dim: int | None = None,
@@ -394,9 +396,9 @@ def _write_info(
     video_info_by_camera: dict[str, dict],
 ) -> None:
     if state_dim is None:
-        state_dim = len(motors)
+        state_dim = len(state_names) if state_names is not None else 0
     if action_dim is None:
-        action_dim = len(motors)
+        action_dim = len(action_names) if action_names is not None else 0
     if state_names is not None and len(state_names) != state_dim:
         state_names = None
     if action_names is not None and len(action_names) != action_dim:
@@ -492,7 +494,8 @@ def json_to_lerobot_v2(
         robot_config.json_action_data_name,
         robot_config.camera_to_image_key,
     )
-    motors = robot_config.motors
+    state_names = list(robot_config.state_names or robot_config.motors)
+    action_names = list(robot_config.action_names or robot_config.motors)
     cameras = robot_config.cameras
 
     chunk_size = 1000
@@ -589,7 +592,13 @@ def json_to_lerobot_v2(
 
     _write_tasks(tasks, meta_dir)
     _write_episodes(episode_lengths, episode_tasks, meta_dir)
-    _write_modality(motors, cameras, meta_dir, modality_override=modality_override)
+    _write_modality(
+        state_names,
+        action_names,
+        cameras,
+        meta_dir,
+        modality_override=modality_override,
+    )
 
     stats = _compute_stats(stats_buffers)
     _write_stats(stats, meta_dir)
@@ -597,12 +606,13 @@ def json_to_lerobot_v2(
     _write_info(
         meta_dir,
         robot_type=robot_type,
-        motors=motors,
         cameras=cameras,
         state_dim=state_dim,
         action_dim=action_dim,
-        state_names=motors if modality_override is None else list(modality_override["state"].keys()),
-        action_names=motors if modality_override is None else list(modality_override["action"].keys()),
+        state_names=state_names if modality_override is None else list(modality_override["state"].keys()),
+        action_names=action_names
+        if modality_override is None
+        else list(modality_override["action"].keys()),
         fps=fps,
         total_episodes=len(json_dataset),
         total_frames=total_frames,
