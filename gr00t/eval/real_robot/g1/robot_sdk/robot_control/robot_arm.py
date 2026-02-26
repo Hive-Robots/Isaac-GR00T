@@ -72,6 +72,7 @@ class G1_29_ArmController:
         self.q_target = np.zeros(14)
         self.tauff_target = np.zeros(14)
         self.motion_mode = motion_mode
+        self.waist_yaw_target = None 
         self.simulation_mode = simulation_mode
         self.kp_high = 300.0
         self.kd_high = 3.0
@@ -190,6 +191,14 @@ class G1_29_ArmController:
                 self.msg.motor_cmd[id].q = clipped_arm_q_target[idx]
                 self.msg.motor_cmd[id].dq = 0
                 self.msg.motor_cmd[id].tau = arm_tauff_target[idx]
+            
+            # Apply waist yaw target position (controlled by X/Y buttons)
+            current_waist_q = self.lowstate_buffer.GetData().motor_state[G1_29_JointIndex.kWaistYaw].q
+            if self.waist_yaw_target is not None:
+                self.msg.motor_cmd[G1_29_JointIndex.kWaistYaw].q = self.waist_yaw_target
+            else:
+                # If no target set, maintain current position (lock waist)
+                self.msg.motor_cmd[G1_29_JointIndex.kWaistYaw].q = current_waist_q
 
             self.msg.crc = self.crc.Crc(self.msg)
             self.lowcmd_publisher.Write(self.msg)
@@ -204,6 +213,46 @@ class G1_29_ArmController:
             time.sleep(sleep_time)
             # logger_mp.debug(f"arm_velocity_limit:{self.arm_velocity_limit}")
             # logger_mp.debug(f"sleep_time:{sleep_time}")
+
+    def ctrl_waist_yaw(self, delta_angle):
+        '''
+        Incrementally adjust the waist yaw joint by delta_angle (in radians).
+        Positive delta rotates to the right, negative to the left.
+        (Same as in XR_Tele)
+        '''
+        # Initialize target to current position on first use
+        if self.waist_yaw_target is None:
+            current_waist = self.lowstate_buffer.GetData().motor_state[G1_29_JointIndex.kWaistYaw].q
+            self.waist_yaw_target = current_waist
+        
+        # Update target position
+        self.waist_yaw_target += delta_angle
+        
+        # Clamp to limits based on URDF (actual limit: ±2.618 rad / ±150°)
+        # Using ±2.0 rad (±114.6°) for safety margin
+        self.waist_yaw_target = np.clip(self.waist_yaw_target, -2.0, 2.0)
+    
+    def ctrl_waist_yaw_abs(self, target_angle):
+        '''
+        Set a goal target angle for the waist yaw joint.
+        Positive delta rotates to the right, negative to the left.
+        (Same as in XR_Tele)
+        '''
+        # Initialize target to current position on first use
+        if self.waist_yaw_target is None:
+            current_waist = self.lowstate_buffer.GetData().motor_state[G1_29_JointIndex.kWaistYaw].q
+            self.waist_yaw_target = current_waist
+        
+        # Update target position
+        self.waist_yaw_target = target_angle
+        
+        # Clamp to limits based on URDF (actual limit: ±2.618 rad / ±150°)
+        # Using ±2.0 rad (±114.6°) for safety margin
+        self.waist_yaw_target = np.clip(self.waist_yaw_target, -2.0, 2.0)
+        
+    def get_waist_yaw_target(self):
+        '''Return current waist yaw target position.'''
+        return self.waist_yaw_target if self.waist_yaw_target is not None else 0.0
 
     def ctrl_dual_arm(self, q_target, tauff_target):
         """Set control target values q & tau of the left and right arm motors."""
