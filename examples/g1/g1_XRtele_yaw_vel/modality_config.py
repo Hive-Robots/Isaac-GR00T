@@ -7,10 +7,14 @@ from gr00t.data.types import ActionRepresentation
 from gr00t.data.types import ActionType
 
 # Modality configuration for the Unitree G1 dataset (xr_tele) version.
-unitree_g1_xrtele = {
+unitree_g1_xrtele_yaw_vel = {
     "video": ModalityConfig(
         delta_indices=[0],
-        modality_keys=["cam_left_high"],
+        modality_keys=[
+            "cam_left_high",
+            "cam_left_wrist",
+            "cam_right_wrist",
+        ],
     ),
     "state": ModalityConfig(
         delta_indices=[0],
@@ -43,6 +47,7 @@ unitree_g1_xrtele = {
             "kRightHandIndex1",
             "kRightHandMiddle0",
             "kRightHandMiddle1",
+            "kWaistYaw",
         ],
     ),
     "action": ModalityConfig(
@@ -76,6 +81,10 @@ unitree_g1_xrtele = {
             "kRightHandIndex1",
             "kRightHandMiddle0",
             "kRightHandMiddle1",
+            "kWaistYaw",
+            "vx",
+            "vy",
+            "vyaw",
         ],
         action_configs=[
             ActionConfig(
@@ -83,7 +92,7 @@ unitree_g1_xrtele = {
                 type=ActionType.NON_EEF,
                 format=ActionFormat.DEFAULT,
             )
-            for _ in range(28)
+            for _ in range(32)
         ],
     ),
     "language": ModalityConfig(
@@ -92,4 +101,4 @@ unitree_g1_xrtele = {
     ),
 }
 
-register_modality_config(unitree_g1_xrtele, embodiment_tag=EmbodimentTag.NEW_EMBODIMENT)
+register_modality_config(unitree_g1_xrtele_yaw_vel, embodiment_tag=EmbodimentTag.NEW_EMBODIMENT)

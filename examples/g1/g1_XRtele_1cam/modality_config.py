@@ -7,14 +7,10 @@ from gr00t.data.types import ActionRepresentation
 from gr00t.data.types import ActionType
 
 # Modality configuration for the Unitree G1 dataset (xr_tele) version.
-unitree_g1_xrtele_wristcams_hand_IO = {
+unitree_g1_xrtele_1cam = {
     "video": ModalityConfig(
         delta_indices=[0],
-        modality_keys=[
-            "cam_left_high",
-            "cam_left_wrist",
-            "cam_right_wrist",
-        ],
+        modality_keys=["cam_left_high"],
     ),
     "state": ModalityConfig(
         delta_indices=[0],
@@ -66,8 +62,20 @@ unitree_g1_xrtele_wristcams_hand_IO = {
             "kRightWristRoll",
             "kRightWristPitch",
             "kRightWristYaw",
-            "left_trig",
-            "right_trig",
+            "kLeftHandThumb0",
+            "kLeftHandThumb1",
+            "kLeftHandThumb2",
+            "kLeftHandMiddle0",
+            "kLeftHandMiddle1",
+            "kLeftHandIndex0",
+            "kLeftHandIndex1",
+            "kRightHandThumb0",
+            "kRightHandThumb1",
+            "kRightHandThumb2",
+            "kRightHandIndex0",
+            "kRightHandIndex1",
+            "kRightHandMiddle0",
+            "kRightHandMiddle1",
         ],
         action_configs=[
             ActionConfig(
@@ -75,7 +83,7 @@ unitree_g1_xrtele_wristcams_hand_IO = {
                 type=ActionType.NON_EEF,
                 format=ActionFormat.DEFAULT,
             )
-            for _ in range(16)
+            for _ in range(28)
         ],
     ),
     "language": ModalityConfig(
@@ -84,4 +92,4 @@ unitree_g1_xrtele_wristcams_hand_IO = {
     ),
 }
 
-register_modality_config(unitree_g1_xrtele_wristcams_hand_IO, embodiment_tag=EmbodimentTag.NEW_EMBODIMENT)
+register_modality_config(unitree_g1_xrtele_1cam, embodiment_tag=EmbodimentTag.NEW_EMBODIMENT)
