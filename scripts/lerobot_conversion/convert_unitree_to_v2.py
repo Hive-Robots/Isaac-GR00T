@@ -453,13 +453,29 @@ def _upload_v2_dataset(repo_id: str) -> None:
         raise FileNotFoundError(f"Converted dataset not found at: {dataset_path}")
 
     api = HfApi()
-    api.upload_folder(
-        repo_id=repo_id,
-        repo_type="dataset",
-        folder_path=str(dataset_path),
-        path_in_repo="",
-        commit_message="Upload LeRobot v2.1 dataset",
-    )
+    try:
+        # `upload_folder` expects the destination repo to already exist.
+        # Create it when missing and no-op when it already exists.
+        api.create_repo(repo_id=repo_id, repo_type="dataset", exist_ok=True)
+    except Exception as exc:
+        raise RuntimeError(
+            "Failed to create or access the Hugging Face dataset repo. "
+            "Verify `repo_id` is '<namespace>/<name>' and that your token has write access."
+        ) from exc
+
+    try:
+        api.upload_folder(
+            repo_id=repo_id,
+            repo_type="dataset",
+            folder_path=str(dataset_path),
+            path_in_repo="",
+            commit_message="Upload LeRobot v2.1 dataset",
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "Failed to upload dataset to Hugging Face Hub. "
+            "If you are not logged in, run `huggingface-cli login`."
+        ) from exc
 
 
 def json_to_lerobot_v2(
