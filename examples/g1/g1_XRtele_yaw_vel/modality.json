@@ -16,7 +16,7 @@
       "start": 21,
       "end": 28
     },
-    "body": {
+    "waist": {
       "start": 28,
       "end": 29
     }
@@ -38,15 +38,30 @@
       "start": 21,
       "end": 28
     },
-    "body": {
+    "waist": {
       "start": 28,
       "end": 29
     },
-    "body_vel": {
+    "base": {
       "start": 29,
       "end": 32
     }
   },
+  "json_state_data_name": [
+    "left_arm.qpos",
+    "right_arm.qpos",
+    "left_ee.qpos",
+    "right_ee.qpos",
+    "waist.qpos"
+  ],
+  "json_action_data_name": [
+    "left_arm.qpos",
+    "right_arm.qpos",
+    "left_ee.qpos",
+    "right_ee.qpos",
+    "waist.qpos",
+    "base.qvel"
+  ],
   "video": {
     "cam_left_high": {
       "original_key": "observation.images.cam_left_high"

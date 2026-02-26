@@ -181,15 +181,15 @@ G1_DEX3_YAW_VEL_CONFIG = RobotConfig(
         "right_arm.qpos",
         "left_ee.qpos",
         "right_ee.qpos",
-        "body.qpos",
+        "waist.qpos",
     ],
     json_action_data_name=[
         "left_arm.qpos",
         "right_arm.qpos",
         "left_ee.qpos",
         "right_ee.qpos",
-        "body.qpos",
-        "body.qvel",
+        "waist.qpos",
+        "base.qvel",
     ],
     state_names=[
         "kLeftShoulderPitch",
@@ -301,8 +301,8 @@ G1_DEX3_YAW_CONFIG = RobotConfig(
         "color_2": "cam_right_wrist",
     },
     
-    json_state_data_name=["left_arm.qpos", "right_arm.qpos", "left_ee.qpos", "right_ee.qpos"],
-    json_action_data_name=["left_arm.qpos", "right_arm.qpos", "left_ee.qpos", "right_ee.qpos"],
+    json_state_data_name=["left_arm.qpos", "right_arm.qpos", "left_ee.qpos", "right_ee.qpos", "waist.qpos"],
+    json_action_data_name=["left_arm.qpos", "right_arm.qpos", "left_ee.qpos", "right_ee.qpos", "waist.qpos"],
 )
 
 G1_DEX3_HAND_IO_CONFIG = RobotConfig(
@@ -427,12 +427,14 @@ G1_DEX3_YAW_HAND_IO_CONFIG = RobotConfig(
         "right_arm.qpos",
         "left_ee.qpos",
         "right_ee.qpos",
+        "waist.qpos",
     ],
     json_action_data_name=[
         "left_arm.qpos",
         "right_arm.qpos",
         "left_trig.qpos",
         "right_trig.qpos",
+        "waist.qpos",
     ],
     state_names=[
         "kLeftShoulderPitch",
@@ -536,15 +538,15 @@ G1_DEX3_YAW_VEL_HAND_IO_CONFIG = RobotConfig(
         "right_arm.qpos",
         "left_ee.qpos",
         "right_ee.qpos",
-        "body.qpos",
+        "waist.qpos",
     ],
     json_action_data_name=[
         "left_arm.qpos",
         "right_arm.qpos",
         "left_trig.qpos",
         "right_trig.qpos",
-        "body.qpos",
-        "body.qvel",
+        "waist.qpos",
+        "base.qvel",
     ],
     state_names=[
         "kLeftShoulderPitch",
