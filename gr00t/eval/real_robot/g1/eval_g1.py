@@ -93,6 +93,13 @@ RIGHT_HAND_STATE_KEYS = [
     "kRightHandMiddle1",
 ]
 
+WAIST_STATE_KEY = "kWaistYaw"
+
+
+def _read_current_waist_yaw(arm_ctrl: Any) -> float:
+    return float(arm_ctrl.get_current_waist_yaw())
+
+
 def setup_image_client_for_eval(cfg: "EvalConfig", camera_keys: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     Match eval_g1_lerobot setup style while keeping runtime image overrides
@@ -277,6 +284,7 @@ def _build_policy_observation(
     camera_keys: List[str],
     observation: Dict[str, Any],
     current_arm_q: np.ndarray,
+    current_waist_yaw: float,
     side_states: Dict[str, np.ndarray],
     lang_instruction: str,
 ) -> Dict[str, Any]:
@@ -296,6 +304,8 @@ def _build_policy_observation(
         obs[key] = float(left_state[idx]) if idx < left_state.shape[0] else 0.0
     for idx, key in enumerate(RIGHT_HAND_STATE_KEYS):
         obs[key] = float(right_state[idx]) if idx < right_state.shape[0] else 0.0
+
+    obs[WAIST_STATE_KEY] = float(current_waist_yaw)
 
     return obs
 
@@ -317,6 +327,9 @@ def _execute_action(
     )
     tau = arm_ik.solve_tau(arm_action)
     arm_ctrl.ctrl_dual_arm(arm_action, tau)
+
+    if WAIST_STATE_KEY in action_dict and hasattr(arm_ctrl, "ctrl_waist_yaw_abs"):
+        arm_ctrl.ctrl_waist_yaw_abs(float(action_dict[WAIST_STATE_KEY]))
 
     if not ee_enabled or ee_dof <= 0:
         return
@@ -464,10 +477,12 @@ def eval(cfg: EvalConfig):
                 arm_ctrl,
             )
             side_states = _read_ee_side_states(ee_enabled, ee_shared_mem, ee_dof, ee_sides)
+            current_waist_yaw = _read_current_waist_yaw(arm_ctrl)
             policy_obs = _build_policy_observation(
                 policy.camera_keys,
                 observation,
                 current_arm_q,
+                current_waist_yaw,
                 side_states,
                 cfg.lang_instruction,
             )
