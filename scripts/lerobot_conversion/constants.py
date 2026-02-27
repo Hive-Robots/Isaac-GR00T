@@ -611,6 +611,7 @@ ROBOT_CONFIGS = {
     "Unitree_G1_Dex3_real_Left_2Cam": G1_DEX3_REAL_LEFT_2CAM_CONFIG,
     "Unitree_G1_Dex3_yaw": G1_DEX3_YAW_CONFIG,
     "Unitree_G1_Dex3_yaw_vel": G1_DEX3_YAW_VEL_CONFIG,
+    "Unitree_G1_Dex3_yaw_hand_IO": G1_DEX3_YAW_HAND_IO_CONFIG,
     "Unitree_G1_Dex3_hand_IO": G1_DEX3_HAND_IO_CONFIG,
     "Unitree_G1_Dex3_yaw_vel_hand_IO": G1_DEX3_YAW_VEL_HAND_IO_CONFIG,
 }

@@ -83,6 +83,7 @@ class G1_29_ArmController:
 
         self.all_motor_q = None
         self.arm_velocity_limit = 20.0
+        self.waist_velocity_limit = 5.0
         self.control_dt = 1.0 / 250.0
 
         self._speed_gradual_max = False
@@ -171,6 +172,11 @@ class G1_29_ArmController:
         clipped_arm_q_target = current_q + delta / max(motion_scale, 1.0)
         return clipped_arm_q_target
 
+    def clip_waist_yaw_target(self, target_q, velocity_limit):
+        current_q = self.get_current_waist_yaw()
+        max_step = velocity_limit * self.control_dt
+        return current_q + np.clip(target_q - current_q, -max_step, max_step)
+
     def _ctrl_motor_state(self):
         if self.motion_mode:
             self.msg.motor_cmd[G1_29_JointIndex.kNotUsedJoint0].q = 1.0
@@ -181,6 +187,7 @@ class G1_29_ArmController:
             with self.ctrl_lock:
                 arm_q_target = self.q_target
                 arm_tauff_target = self.tauff_target
+                waist_yaw_target = self.waist_yaw_target
 
             if self.simulation_mode:
                 clipped_arm_q_target = arm_q_target
@@ -194,8 +201,11 @@ class G1_29_ArmController:
             
             # Apply waist yaw target position (controlled by X/Y buttons)
             current_waist_q = self.lowstate_buffer.GetData().motor_state[G1_29_JointIndex.kWaistYaw].q
-            if self.waist_yaw_target is not None:
-                self.msg.motor_cmd[G1_29_JointIndex.kWaistYaw].q = self.waist_yaw_target
+            if waist_yaw_target is not None:
+                clipped_waist_target = self.clip_waist_yaw_target(
+                    waist_yaw_target, velocity_limit=self.waist_velocity_limit
+                )
+                self.msg.motor_cmd[G1_29_JointIndex.kWaistYaw].q = clipped_waist_target
             else:
                 # If no target set, maintain current position (lock waist)
                 self.msg.motor_cmd[G1_29_JointIndex.kWaistYaw].q = current_waist_q
@@ -220,17 +230,18 @@ class G1_29_ArmController:
         Positive delta rotates to the right, negative to the left.
         (Same as in XR_Tele)
         '''
-        # Initialize target to current position on first use
-        if self.waist_yaw_target is None:
-            current_waist = self.lowstate_buffer.GetData().motor_state[G1_29_JointIndex.kWaistYaw].q
-            self.waist_yaw_target = current_waist
-        
-        # Update target position
-        self.waist_yaw_target += delta_angle
-        
-        # Clamp to limits based on URDF (actual limit: ±2.618 rad / ±150°)
-        # Using ±2.0 rad (±114.6°) for safety margin
-        self.waist_yaw_target = np.clip(self.waist_yaw_target, -2.0, 2.0)
+        with self.ctrl_lock:
+            # Initialize target to current position on first use
+            if self.waist_yaw_target is None:
+                current_waist = self.lowstate_buffer.GetData().motor_state[G1_29_JointIndex.kWaistYaw].q
+                self.waist_yaw_target = current_waist
+
+            # Update target position
+            self.waist_yaw_target += delta_angle
+
+            # Clamp to limits based on URDF (actual limit: ±2.618 rad / ±150°)
+            # Using ±2.0 rad (±114.6°) for safety margin
+            self.waist_yaw_target = np.clip(self.waist_yaw_target, -2.0, 2.0)
     
     def ctrl_waist_yaw_abs(self, target_angle):
         '''
@@ -238,17 +249,18 @@ class G1_29_ArmController:
         Positive delta rotates to the right, negative to the left.
         (Same as in XR_Tele)
         '''
-        # Initialize target to current position on first use
-        if self.waist_yaw_target is None:
-            current_waist = self.lowstate_buffer.GetData().motor_state[G1_29_JointIndex.kWaistYaw].q
-            self.waist_yaw_target = current_waist
-        
-        # Update target position
-        self.waist_yaw_target = target_angle
-        
-        # Clamp to limits based on URDF (actual limit: ±2.618 rad / ±150°)
-        # Using ±2.0 rad (±114.6°) for safety margin
-        self.waist_yaw_target = np.clip(self.waist_yaw_target, -2.0, 2.0)
+        with self.ctrl_lock:
+            # Initialize target to current position on first use
+            if self.waist_yaw_target is None:
+                current_waist = self.lowstate_buffer.GetData().motor_state[G1_29_JointIndex.kWaistYaw].q
+                self.waist_yaw_target = current_waist
+
+            # Update target position
+            self.waist_yaw_target = target_angle
+
+            # Clamp to limits based on URDF (actual limit: ±2.618 rad / ±150°)
+            # Using ±2.0 rad (±114.6°) for safety margin
+            self.waist_yaw_target = np.clip(self.waist_yaw_target, -2.0, 2.0)
         
     def get_waist_yaw_target(self):
         '''Return current waist yaw target position.'''

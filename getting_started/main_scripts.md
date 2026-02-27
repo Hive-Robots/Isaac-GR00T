@@ -115,7 +115,7 @@ Arguments:
 - `--strict` (bool, default: True). Enforce strict input/output validation.
 - `--use-sim-policy-wrapper` (bool, default: False). Wrap policy with sim wrapper.
 
-If you are debugging, it is recommended to use the `dataset-path` argument instead of the `model-path`. That way it will replay a recorded episode rather than calculating actions.
+If you are debugging, it is recommended to use the `dataset-path` argument instead of the `model-path`. That way it will replay a recorded episode rather than calculating actions. If running replay episode, it is important to use the `execution-horizon` arg.
 
 ### Client-side rollout against server or local model
 Use a robot-specific inference script:
@@ -126,7 +126,7 @@ python gr00t/eval/real_robot/g1/eval_g1_loop.py \
   --modality_config_name unitree_g1_xrtele \
   --policy_host 127.0.0.1 \
   --policy_port 5555 \
-  --action_horizon 8 \
+  --action_horizon 16 \
   --control_hz 25 \
   --network_interface enx9c69d31ecd9b
 
