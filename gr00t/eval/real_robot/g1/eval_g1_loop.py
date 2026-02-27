@@ -29,9 +29,11 @@ Running example:
 
 from dataclasses import asdict, dataclass
 from importlib.util import module_from_spec, spec_from_file_location
+import json
 import logging
 from multiprocessing.sharedctypes import SynchronizedArray
 from multiprocessing import shared_memory
+from pathlib import Path
 from pprint import pformat
 import select
 import sys
@@ -106,6 +108,66 @@ WAIST_STATE_KEY = "kWaistYaw"
 
 def _read_current_waist_yaw(arm_ctrl: Any) -> float:
     return float(arm_ctrl.get_current_waist_yaw())
+
+
+def _read_initial_pose_from_dataset(dataset_path: str) -> dict[str, Any]:
+    import pyarrow.parquet as pq
+
+    root = Path(dataset_path)
+    with open(root / "meta" / "info.json", "r") as f:
+        info = json.load(f)
+    with open(root / "meta" / "modality.json", "r") as f:
+        modality = json.load(f)
+    with open(root / "meta" / "episodes.jsonl", "r") as f:
+        first_episode = json.loads(next(line for line in f if line.strip()))
+
+    episode_index = int(first_episode["episode_index"])
+    chunk_size = int(info["chunks_size"])
+    parquet_rel = info["data_path"].format(
+        episode_chunk=episode_index // chunk_size,
+        episode_index=episode_index,
+    )
+    table = pq.read_table(root / parquet_rel, columns=["observation.state"])
+    qpos = np.asarray(table.column("observation.state")[0].as_py(), dtype=np.float32)
+    state_meta = modality["state"]
+
+    def _slice(name: str) -> np.ndarray:
+        spec = state_meta[name]
+        return qpos[int(spec["start"]) : int(spec["end"])]
+
+    if all(k in state_meta for k in ARM_STATE_KEYS):
+        arm_q = np.array([float(_slice(k)[0]) for k in ARM_STATE_KEYS], dtype=np.float32)
+    elif "left_arm" in state_meta and "right_arm" in state_meta:
+        arm_q = np.concatenate([_slice("left_arm"), _slice("right_arm")], axis=0).astype(np.float32)
+    else:
+        raise KeyError(f"Cannot infer arm keys from modality.json state keys: {list(state_meta.keys())}")
+
+    if all(k in state_meta for k in LEFT_HAND_STATE_KEYS):
+        left_hand = np.array([float(_slice(k)[0]) for k in LEFT_HAND_STATE_KEYS], dtype=np.float32)
+    elif "left_hand" in state_meta:
+        left_hand = _slice("left_hand").astype(np.float32)
+    else:
+        left_hand = np.zeros(len(LEFT_HAND_STATE_KEYS), dtype=np.float32)
+
+    if all(k in state_meta for k in RIGHT_HAND_STATE_KEYS):
+        right_hand = np.array([float(_slice(k)[0]) for k in RIGHT_HAND_STATE_KEYS], dtype=np.float32)
+    elif "right_hand" in state_meta:
+        right_hand = _slice("right_hand").astype(np.float32)
+    else:
+        right_hand = np.zeros(len(RIGHT_HAND_STATE_KEYS), dtype=np.float32)
+
+    waist_yaw = None
+    if WAIST_STATE_KEY in state_meta:
+        waist_yaw = float(_slice(WAIST_STATE_KEY)[0])
+    elif "waist" in state_meta:
+        waist_yaw = float(_slice("waist")[0])
+
+    return {
+        "arm_q": arm_q,
+        "left_hand": left_hand,
+        "right_hand": right_hand,
+        "waist_yaw": waist_yaw,
+    }
 
 
 def setup_image_client_for_eval(cfg: "EvalConfig", camera_keys: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -390,6 +452,7 @@ class EvalConfig:
     # Optional DDS network interface name (e.g., "enx9c69d31ecd9b"); None uses autodetect.
     network_interface: Optional[str] = None
     enable_diagnostics: bool = False
+    dataset_path: Optional[str] = None
 
 
 @draccus.wrap()
@@ -459,11 +522,33 @@ def eval(cfg: EvalConfig):
 
         # "The initial positions of the robot's arm and fingers take the initial positions during data recording."
         current_arm_q = arm_ctrl.get_current_dual_arm_q()
-        tau = arm_ik.solve_tau(current_arm_q)
-        arm_ctrl.ctrl_dual_arm(current_arm_q, tau)
-        time.sleep(1.0)
         init_arm_q = np.asarray(current_arm_q, dtype=np.float32).copy()
         init_side_states = _read_ee_side_states(bool(cfg.ee), ee_shared_mem, ee_dof, ee_sides)
+        init_waist_yaw = _read_current_waist_yaw(arm_ctrl)
+        if cfg.dataset_path:
+            init_pose = _read_initial_pose_from_dataset(cfg.dataset_path)
+            init_arm_q = init_pose["arm_q"].astype(np.float32)
+            init_side_states["left"] = init_pose["left_hand"].astype(np.float32)
+            init_side_states["right"] = init_pose["right_hand"].astype(np.float32)
+            if init_pose["waist_yaw"] is not None:
+                init_waist_yaw = float(init_pose["waist_yaw"])
+            logging.info("Loaded initial pose from dataset: %s", cfg.dataset_path)
+        tau = arm_ik.solve_tau(init_arm_q)
+        arm_ctrl.ctrl_dual_arm(init_arm_q, tau)
+        if hasattr(arm_ctrl, "ctrl_waist_yaw_abs"):
+            arm_ctrl.ctrl_waist_yaw_abs(float(init_waist_yaw))
+        if bool(cfg.ee) and ee_dof > 0:
+            if isinstance(ee_shared_mem["left"], SynchronizedArray):
+                ee_shared_mem["left"][:] = to_list(init_side_states.get("left", np.zeros(ee_dof, dtype=np.float32)))
+                ee_shared_mem["right"][:] = to_list(init_side_states.get("right", np.zeros(ee_dof, dtype=np.float32)))
+            elif hasattr(ee_shared_mem["left"], "value") and hasattr(ee_shared_mem["right"], "value"):
+                ee_shared_mem["left"].value = to_scalar(
+                    init_side_states.get("left", np.zeros(ee_dof, dtype=np.float32))
+                )
+                ee_shared_mem["right"].value = to_scalar(
+                    init_side_states.get("right", np.zeros(ee_dof, dtype=np.float32))
+                )
+        time.sleep(1.0)
 
         # --- Run Main Loop ---
         logging.info("Starting evaluation loop at %.2f Hz.", cfg.control_hz)
@@ -514,6 +599,8 @@ def eval(cfg: EvalConfig):
                 if reset_requested:
                     tau = arm_ik.solve_tau(init_arm_q)
                     arm_ctrl.ctrl_dual_arm(init_arm_q, tau)
+                    if hasattr(arm_ctrl, "ctrl_waist_yaw_abs"):
+                        arm_ctrl.ctrl_waist_yaw_abs(float(init_waist_yaw))
                     if ee_enabled and ee_dof > 0:
                         if isinstance(ee_shared_mem["left"], SynchronizedArray):
                             ee_shared_mem["left"][:] = to_list(init_side_states.get("left", np.zeros(ee_dof, dtype=np.float32)))
@@ -531,6 +618,8 @@ def eval(cfg: EvalConfig):
                 if waiting_for_restart:
                     tau = arm_ik.solve_tau(init_arm_q)
                     arm_ctrl.ctrl_dual_arm(init_arm_q, tau)
+                    if hasattr(arm_ctrl, "ctrl_waist_yaw_abs"):
+                        arm_ctrl.ctrl_waist_yaw_abs(float(init_waist_yaw))
                 else:
                     # 1. Get Observations
                     observation, current_arm_q = process_images_and_observations(
