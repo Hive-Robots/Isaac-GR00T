@@ -48,7 +48,7 @@ from robot_sdk.make_robot import (
     setup_image_client as setup_image_client_sdk,
     setup_robot_interface,
 )
-from robot_sdk.robot_control.hand_IO_control import hand_IO_ctrl
+from robot_sdk.robot_control.hand_IO_control import get_hand_state, hand_IO_ctrl
 from robot_sdk.utils.utils import (
     _action_to_sized_vector,
     _to_numpy_image,
@@ -107,6 +107,11 @@ def _read_current_waist_yaw(arm_ctrl: Any) -> float:
 
 def _to_binary_trigger(value: float) -> int:
     return int(np.clip(np.rint(float(value)), 0.0, 1.0))
+
+
+def _hand_state_to_trigger(hand_state: str) -> float:
+    # In this eval path, trigger=1 corresponds to open.
+    return 1.0 if hand_state == "open" else 0.0
 
 
 def _read_initial_pose_from_dataset(dataset_path: str) -> dict[str, Any]:
@@ -587,6 +592,8 @@ def eval(cfg: EvalConfig):
         # --- Run Main Loop ---
         logging.info("Starting evaluation loop at %.2f Hz.", cfg.control_hz)
         ee_enabled = bool(cfg.ee)
+        use_left_trig_state = LEFT_TRIG_KEY in policy.robot_state_keys
+        use_right_trig_state = RIGHT_TRIG_KEY in policy.robot_state_keys
 
         while True:
             loop_start_time = time.perf_counter()
@@ -615,6 +622,12 @@ def eval(cfg: EvalConfig):
                 side_states,
                 cfg.lang_instruction,
             )
+            if use_left_trig_state or use_right_trig_state:
+                hand_state = get_hand_state(side="both")
+                if use_left_trig_state:
+                    policy_obs[LEFT_TRIG_KEY] = _hand_state_to_trigger(hand_state["left"])
+                if use_right_trig_state:
+                    policy_obs[RIGHT_TRIG_KEY] = _hand_state_to_trigger(hand_state["right"])
 
             if any(policy_obs.get(camera_key) is None for camera_key in policy.camera_keys):
                 logging.warning("Missing camera frame(s); skipping policy/action this cycle.")

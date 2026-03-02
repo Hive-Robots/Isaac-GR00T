@@ -348,6 +348,20 @@ class Dex3HandIO:
             return self.publish_targets(left_q, right_q)
         return q14
 
+    def get_IO_hand_state(self, side: str = "both"):
+        side_l = side.lower().strip()
+        if side_l not in ("left", "right", "both"):
+            raise ValueError(f"Invalid side '{side}'. Expected 'left', 'right', or 'both'.")
+
+        left_state = "close" if self.left_closed_cmd else "open"
+        right_state = "close" if self.right_closed_cmd else "open"
+
+        if side_l == "left":
+            return left_state
+        if side_l == "right":
+            return right_state
+        return {"left": left_state, "right": right_state}
+
 _DEFAULT_IO: Optional[Dex3HandIO] = None
 
 
@@ -361,6 +375,11 @@ def get_hand_io_controller() -> Dex3HandIO:
 def hand_IO_ctrl(action: str, side: str = "both", publish: bool = True, controller: Optional[Dex3HandIO] = None) -> np.ndarray:
     ctrl = controller or get_hand_io_controller()
     return ctrl.hand_IO_ctrl(action=action, side=side, publish=publish)
+
+
+def get_IO_hand_state(side: str = "both", controller: Optional[Dex3HandIO] = None):
+    ctrl = controller or get_hand_io_controller()
+    return ctrl.get_IO_hand_state(side=side)
 
 
 if __name__ == "__main__":
