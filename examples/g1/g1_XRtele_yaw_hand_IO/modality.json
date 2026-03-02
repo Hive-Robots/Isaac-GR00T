@@ -8,17 +8,17 @@
       "start": 7,
       "end": 14
     },
-    "left_ee": {
+    "left_trig": {
       "start": 14,
-      "end": 21
+      "end": 15
     },
-    "right_ee": {
-      "start": 21,
-      "end": 28
+    "right_trig": {
+      "start": 15,
+      "end": 16
     },
     "waist": {
-      "start": 28,
-      "end": 29
+      "start": 16,
+      "end": 17
     }
   },
   "action": {
@@ -50,8 +50,8 @@
   "json_state_data_name": [
     "left_arm.qpos",
     "right_arm.qpos",
-    "left_ee.qpos",
-    "right_ee.qpos",
+    "left_trig.qpos",
+    "right_trig.qpos",
     "waist.qpos"
   ],
   "json_action_data_name": [
