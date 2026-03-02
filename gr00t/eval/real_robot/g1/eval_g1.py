@@ -48,6 +48,7 @@ from robot_sdk.make_robot import (
     setup_image_client as setup_image_client_sdk,
     setup_robot_interface,
 )
+from robot_sdk.robot_control.hand_IO_control import hand_IO_ctrl
 from robot_sdk.utils.utils import (
     _action_to_sized_vector,
     _to_numpy_image,
@@ -96,10 +97,16 @@ RIGHT_HAND_STATE_KEYS = [
 ]
 
 WAIST_STATE_KEY = "kWaistYaw"
+LEFT_TRIG_KEY = "left_trig"
+RIGHT_TRIG_KEY = "right_trig"
 
 
 def _read_current_waist_yaw(arm_ctrl: Any) -> float:
     return float(arm_ctrl.get_current_waist_yaw())
+
+
+def _to_binary_trigger(value: float) -> int:
+    return int(np.clip(np.rint(float(value)), 0.0, 1.0))
 
 
 def _read_initial_pose_from_dataset(dataset_path: str) -> dict[str, Any]:
@@ -395,6 +402,36 @@ def _execute_action(
 
     if not ee_enabled or ee_dof <= 0:
         return
+
+    use_left_trig = LEFT_TRIG_KEY in action_dict
+    use_right_trig = RIGHT_TRIG_KEY in action_dict
+    if use_left_trig or use_right_trig:
+        q14: Optional[np.ndarray] = None
+        if use_left_trig:
+            left_trig = _to_binary_trigger(action_dict[LEFT_TRIG_KEY])
+            left_action = "open" if left_trig == 1 else "close"
+            q14 = hand_IO_ctrl(action=left_action, side="left", publish=False)
+        if use_right_trig:
+            right_trig = _to_binary_trigger(action_dict[RIGHT_TRIG_KEY])
+            right_action = "open" if right_trig == 1 else "close"
+            q14 = hand_IO_ctrl(action=right_action, side="right", publish=False)
+
+        if q14 is not None:
+            left_action = _action_to_sized_vector(np.asarray(q14[:7], dtype=np.float32), ee_dof)
+            right_action = _action_to_sized_vector(np.asarray(q14[7:14], dtype=np.float32), ee_dof)
+            if isinstance(ee_shared_mem["left"], SynchronizedArray):
+                if "left" in ee_sides:
+                    ee_shared_mem["left"][:] = to_list(left_action)
+                else:
+                    ee_shared_mem["left"][:] = [0.0 for _ in ee_shared_mem["left"]]
+                if "right" in ee_sides:
+                    ee_shared_mem["right"][:] = to_list(right_action)
+                else:
+                    ee_shared_mem["right"][:] = [0.0 for _ in ee_shared_mem["right"]]
+            elif hasattr(ee_shared_mem["left"], "value") and hasattr(ee_shared_mem["right"], "value"):
+                ee_shared_mem["left"].value = to_scalar(left_action) if "left" in ee_sides else 0.0
+                ee_shared_mem["right"].value = to_scalar(right_action) if "right" in ee_sides else 0.0
+            return
 
     left_action = np.array([float(action_dict.get(key, 0.0)) for key in LEFT_HAND_STATE_KEYS], dtype=np.float32)
     right_action = np.array([float(action_dict.get(key, 0.0)) for key in RIGHT_HAND_STATE_KEYS], dtype=np.float32)

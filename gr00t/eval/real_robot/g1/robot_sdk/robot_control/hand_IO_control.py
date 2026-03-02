@@ -16,11 +16,19 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_, HandState_
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandCmd_
 from robot_sdk.utils.dds import ensure_channel_factory_initialized
 
-from robot_hand_unitree import (
-    Dex3_1_Controller,
-    Dex3_1_Left_JointIndex,
-    Dex3_1_Right_JointIndex,
-)
+try:
+    from robot_sdk.robot_control.robot_hand_unitree import (
+        Dex3_1_Controller,
+        Dex3_1_Left_JointIndex,
+        Dex3_1_Right_JointIndex,
+    )
+except ModuleNotFoundError:
+    # Fallback for direct execution from robot_control/ where local imports are used.
+    from robot_hand_unitree import (
+        Dex3_1_Controller,
+        Dex3_1_Left_JointIndex,
+        Dex3_1_Right_JointIndex,
+    )
 
 DEX3_GRAB_POSE_RIGHT = np.array([-0.0, -1.0, -1.70, 1.55, 1.75, 1.55, 1.75], dtype=np.float64)
 DEX3_GRAB_POSE_LEFT = np.array([0.0, 1.0, 1.70, -1.55, -1.75, -1.55, -1.75], dtype=np.float64)
