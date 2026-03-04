@@ -116,9 +116,9 @@ class EpisodeWriter():
         os.makedirs(self.audio_dir, exist_ok=True)
         with open(self.json_path, "w", encoding="utf-8") as f:
             f.write("{\n")
-            f.write(""info": " + json.dumps(self.info, ensure_ascii=False, indent=4) + ",\n")
-            f.write(""text": " + json.dumps(self.text, ensure_ascii=False, indent=4) + ",\n")
-            f.write(""data": [\n")
+            f.write("\"info\": " + json.dumps(self.info, ensure_ascii=False, indent=4) + ",\n")
+            f.write("\"text\": " + json.dumps(self.text, ensure_ascii=False, indent=4) + ",\n")
+            f.write("\"data\": [\n")
         self.first_item = True   # Flag to handle commas in JSON array
 
         if self.rerun_log:

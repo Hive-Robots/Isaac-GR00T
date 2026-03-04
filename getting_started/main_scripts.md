@@ -128,8 +128,9 @@ python gr00t/eval/real_robot/g1/eval_g1_loop.py \
   --policy_port 5555 \
   --action_horizon 16 \
   --control_hz 25 \
-  --network_interface enx9c69d31ecd9b
-
+  --network_interface enx9c69d31ecd9b \
+  --record true \
+  --record_save_dir ./g1_eval_records
 ```
 Arguments:
 - `--modality_config_path` (str, default: `examples/g1_XRtele/modality_config.py`). Path to modality config Python file.
@@ -156,6 +157,10 @@ Arguments:
 - `--network_interface` (str | None, default: None). Optional DDS network interface name (autodetect when omitted).
 - `--enable_diagnostics` (bool, default: False). Write loop diagnostics CSV.
 - `--dataset_path` (str | None, default: None). Optional dataset path for loading initial robot pose.
+- `--record` (bool, default: False). Enable episode recording during loop eval.
+- `--record_dir` (str, default: `g1_eval_records`). Default recording output directory.
+- `--record_save_dir` (str | None, default: None). Explicit recording output directory; when set, takes precedence over `--record_dir`.
+- `--record_rerun_log` (bool, default: False). Enable rerun logging in `EpisodeWriter` while recording.
 
 You can check [`docker/g1_policy_client`](../docker/g1_policy_client/README.md) for more information on running the `eval_g1` code directly on the robot.
 

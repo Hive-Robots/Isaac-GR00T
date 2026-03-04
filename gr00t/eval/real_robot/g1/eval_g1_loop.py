@@ -15,7 +15,8 @@ This file is meant to be a simple, readable reference
 for real-world policy debugging and demos.
 
 Running example:
-    uv run python gr00t/eval/real_robot/g1/eval_g1.py \
+    conda activate gr00t
+    python gr00t/eval/real_robot/g1/eval_g1_loop.py \
       --modality_config_path examples/g1_XRtele/modality_config.py \
       --modality_config_name unitree_g1_xrtele \
       --policy_host 127.0.0.1 \
@@ -23,8 +24,10 @@ Running example:
       --action_horizon 8 \
       --control_hz 25 \
       --image_server_address 192.168.123.164 \
-      --image_server_port 5556 \
-      --lang_instruction "Pick up the object and place it in the tray."
+      --image_server_port 5555 \
+      --lang_instruction "Pick up the object and place it in the tray." \
+      --record true \
+      --record_save_dir ./g1_eval_records
 """
 
 from dataclasses import asdict, dataclass
@@ -57,6 +60,7 @@ from robot_sdk.make_robot import (
     setup_robot_interface,
 )
 from robot_sdk.robot_control.hand_IO_control import get_IO_hand_state, hand_IO_ctrl
+from robot_sdk.utils.g1_episode_recorder import G1EpisodeRecorder
 from robot_sdk.utils.utils import (
     _action_to_sized_vector,
     _to_numpy_image,
@@ -495,6 +499,9 @@ class EvalConfig:
     network_interface: Optional[str] = None
     enable_diagnostics: bool = False
     dataset_path: Optional[str] = None
+    record: bool = False
+    record_dir: str = "g1_eval_records"
+    record_rerun_log: bool = False
 
 
 @draccus.wrap()
@@ -518,6 +525,7 @@ def eval(cfg: EvalConfig):
     prev_arm_action: Optional[np.ndarray] = None
     pending_action_seq: List[Dict[str, float]] = []
     run_start_time = time.perf_counter()
+    episode_recorder: Optional[G1EpisodeRecorder] = None
     try:
         if cfg.enable_diagnostics:
             diag_path = f"eval_g1_diagnostics_{time.strftime('%Y%m%d_%H%M%S')}.csv"
@@ -547,6 +555,16 @@ def eval(cfg: EvalConfig):
                 "has_wrist_cam",
             ]
         )
+        if cfg.record:
+            episode_recorder = G1EpisodeRecorder(
+                task_dir=cfg.record_dir,
+                task_goal=cfg.lang_instruction,
+                control_hz=cfg.control_hz,
+                image_width=tv_img_shape[1],
+                image_height=tv_img_shape[0],
+                rerun_log=cfg.record_rerun_log,
+            )
+            logging.info("Recording enabled. Output dir: %s", cfg.record_dir)
 
         # Make sure we are actually getting frames
         wait_for_camera_frames(
@@ -617,6 +635,8 @@ def eval(cfg: EvalConfig):
             logging.warning("Keyboard hotkeys unavailable (stdin is not a POSIX TTY).")
 
         try:
+            if episode_recorder is not None:
+                episode_recorder.start_episode()
             while True:
                 if hotkeys_enabled:
                     while True:
@@ -628,10 +648,14 @@ def eval(cfg: EvalConfig):
                             prev_arm_action = None
                             if waiting_for_restart:
                                 waiting_for_restart = False
+                                if episode_recorder is not None:
+                                    episode_recorder.start_episode()
                                 #logging.info("Restart requested: resuming inference/motion.")
                             else:
                                 reset_requested = True
                                 waiting_for_restart = True
+                                if episode_recorder is not None:
+                                    episode_recorder.stop_episode()
                                 #logging.info("Reset requested: returning to initial pose. Press SPACE again to restart.")
 
                 loop_start_time = time.perf_counter()
@@ -723,6 +747,15 @@ def eval(cfg: EvalConfig):
                                 ee_sides=ee_sides,
                                 ee_shared_mem=ee_shared_mem,
                             )
+                            if episode_recorder is not None:
+                                episode_recorder.record_step(
+                                    policy_obs=policy_obs,
+                                    camera_keys=policy.camera_keys,
+                                    current_arm_q=np.asarray(current_arm_q, dtype=np.float32),
+                                    current_waist_yaw=float(current_waist_yaw),
+                                    side_states=side_states,
+                                    action_dict=action_dict,
+                                )
 
                 # Maintain frequency
                 elapsed = time.perf_counter() - loop_start_time
@@ -762,6 +795,8 @@ def eval(cfg: EvalConfig):
     finally:
         if diag_file is not None:
             diag_file.close()
+        if episode_recorder is not None:
+            episode_recorder.close()
         cleanup_image_resources(image_info)
 
 
