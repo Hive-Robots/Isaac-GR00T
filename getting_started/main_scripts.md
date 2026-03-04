@@ -65,7 +65,7 @@ Arguments:
 Or train using a bash file:
 
 ```bash
-bash examples/GR00T-WholeBodyControl/finetune_g1.sh
+bash examples/g1/finetune_g1_XRtele.sh
 ```
 
 ## Open-loop eval (offline, dataset-driven)
@@ -131,12 +131,37 @@ python gr00t/eval/real_robot/g1/eval_g1_loop.py \
   --network_interface enx9c69d31ecd9b
 
 ```
+Arguments:
+- `--modality_config_path` (str, default: `examples/g1_XRtele/modality_config.py`). Path to modality config Python file.
+- `--modality_config_name` (str, default: `unitree_g1_xrtele`). Modality config object name inside the config module.
+- `--policy_host` (str, default: `localhost`). Policy server host.
+- `--policy_port` (int, default: 5555). Policy server port.
+- `--action_horizon` (int, default: 8). Number of predicted actions to request per policy inference.
+- `--lang_instruction` (str, default: `Perform the task.`). Language instruction passed to the policy.
+- `--control_hz` (float, default: 25.0). Main control loop frequency.
+- `--state_init_timeout_s` (float, default: 5.0). Timeout waiting for initial robot state.
+- `--camera_init_timeout_s` (float, default: 5.0). Timeout waiting for camera frames.
+- `--require_start_keypress` (bool, default: True). Require typing `s` before starting robot motion/eval loop.
+- `--image_server_address` (str, default: `192.168.123.164`). Image server address.
+- `--image_server_port` (int, default: 5555). Image server port.
+- `--head_image_height` (int, default: 480). Head camera image height.
+- `--head_image_width` (int, default: 640). Head camera image width.
+- `--wrist_image_height` (int, default: 480). Wrist camera image height.
+- `--wrist_image_width` (int, default: 640). Wrist camera image width.
+- `--arm` (str, default: `G1_29`). Robot arm configuration key used by `robot_sdk`.
+- `--ee` (str, default: `dex3`). End-effector configuration key used by `robot_sdk`.
+- `--ee_side` (str, default: `both`). End-effector side selection.
+- `--sim` (bool, default: False). Enable simulation mode in robot setup path.
+- `--motion` (bool, default: False). Motion flag forwarded to robot setup path.
+- `--network_interface` (str | None, default: None). Optional DDS network interface name (autodetect when omitted).
+- `--enable_diagnostics` (bool, default: False). Write loop diagnostics CSV.
+- `--dataset_path` (str | None, default: None). Optional dataset path for loading initial robot pose.
 
 You can check [`docker/g1_policy_client`](../docker/g1_policy_client/README.md) for more information on running the `eval_g1` code directly on the robot.
 
 ## Other Inference (Local &/or simulation)
 
-To run a simulated environment:
+To run a simulated environment (Only works with baseline examples):
 ```bash
 python gr00t/eval/rollout_policy.py \
   --policy-client-host 127.0.0.1 \

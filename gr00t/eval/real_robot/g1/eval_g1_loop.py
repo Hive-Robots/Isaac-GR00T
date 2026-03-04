@@ -56,7 +56,7 @@ from robot_sdk.make_robot import (
     setup_image_client as setup_image_client_sdk,
     setup_robot_interface,
 )
-from robot_sdk.robot_control.hand_IO_control import get_hand_state, hand_IO_ctrl
+from robot_sdk.robot_control.hand_IO_control import get_IO_hand_state, hand_IO_ctrl
 from robot_sdk.utils.utils import (
     _action_to_sized_vector,
     _to_numpy_image,
@@ -556,17 +556,11 @@ def eval(cfg: EvalConfig):
             timeout_s=cfg.camera_init_timeout_s,
         )
 
-        if cfg.require_start_keypress:
-            user_input = input("Enter 's' to initialize the robot and start the evaluation: ")
-            if user_input.strip().lower() != "s":
-                logging.info("Start canceled by user input: %s", user_input)
-                return
-
         # "The initial positions of the robot's arm and fingers take the initial positions during data recording."
         current_arm_q = arm_ctrl.get_current_dual_arm_q()
         init_arm_q = np.asarray(current_arm_q, dtype=np.float32).copy()
         init_side_states = _read_ee_side_states(bool(cfg.ee), ee_shared_mem, ee_dof, ee_sides)
-        init_waist_yaw = _read_current_waist_yaw(arm_ctrl)
+        init_waist_yaw = _read_current_waist_yaw(arm_ctrl)*0.0 # BE CAREFUL: I AM NOT SURE THIS IS THE BEST WAY TO DO IT
         if cfg.dataset_path:
             init_pose = _read_initial_pose_from_dataset(cfg.dataset_path)
             init_arm_q = init_pose["arm_q"].astype(np.float32)
@@ -591,6 +585,12 @@ def eval(cfg: EvalConfig):
                     init_side_states.get("right", np.zeros(ee_dof, dtype=np.float32))
                 )
         time.sleep(1.0)
+
+        if cfg.require_start_keypress:
+            user_input = input("Enter 's' to initialize the robot and start the evaluation: ")
+            if user_input.strip().lower() != "s":
+                logging.info("Start canceled by user input: %s", user_input)
+                return
 
         # --- Run Main Loop ---
         logging.info("Starting evaluation loop at %.2f Hz.", cfg.control_hz)
@@ -686,7 +686,7 @@ def eval(cfg: EvalConfig):
                         cfg.lang_instruction,
                     )
                     if use_left_trig_state or use_right_trig_state:
-                        hand_state = get_hand_state(side="both")
+                        hand_state = get_IO_hand_state(side="both")
                         if use_left_trig_state:
                             policy_obs[LEFT_TRIG_KEY] = _hand_state_to_trigger(hand_state["left"])
                         if use_right_trig_state:

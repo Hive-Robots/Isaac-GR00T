@@ -4,26 +4,36 @@ import json
 import datetime
 import numpy as np
 import time
-
+from .rerun_visualizer import RerunLogger
 from queue import Queue, Empty
 from threading import Thread
 import logging_mp
-
 logger_mp = logging_mp.get_logger(__name__)
 
-
-class EpisodeWriter:
-    def __init__(self, task_dir, frequency=30, image_size=[640, 480]):
+class EpisodeWriter():
+    def __init__(self, task_dir, task_goal=None, frequency=30, image_size=[640, 480], rerun_log = True):
         """
         image_size: [width, height]
         """
         logger_mp.info("==> EpisodeWriter initializing...\n")
         self.task_dir = task_dir
+        self.text = {
+            "goal": "Pick up the red cup on the table.",
+            "desc": "task description",
+            "steps":"step1: do this; step2: do that; ...",
+        }
+        if task_goal is not None:
+            self.text["goal"] = task_goal
+
         self.frequency = frequency
         self.image_size = image_size
 
-        self.data = {}
-        self.episode_data = []
+        self.rerun_log = rerun_log
+        if self.rerun_log:
+            logger_mp.info("==> RerunLogger initializing...\n")
+            self.rerun_logger = RerunLogger(prefix="online/", IdxRangeBoundary = 60, memory_limit = "300MB")
+            logger_mp.info("==> RerunLogger initializing ok.\n")
+        
         self.item_id = -1
         self.episode_id = -1
         if os.path.exists(self.task_dir):
@@ -33,10 +43,9 @@ class EpisodeWriter:
             logger_mp.info(f"==> task_dir directory already exist, now self.episode_id is:{self.episode_id}\n")
         else:
             os.makedirs(self.task_dir)
-            logger_mp.info("==> episode directory does not exist, now create one.\n")
+            logger_mp.info(f"==> episode directory does not exist, now create one.\n")
         self.data_info()
-        self.text_desc()
-        self.result = None
+
         self.is_available = True  # Indicates whether the class is available for new operations
         # Initialize the queue and worker thread
         self.item_data_queue = Queue(-1)
@@ -46,44 +55,39 @@ class EpisodeWriter:
         self.worker_thread.start()
 
         logger_mp.info("==> EpisodeWriter initialized successfully.\n")
+    
+    def is_ready(self):
+        return self.is_available
 
     def data_info(self, version="1.0.0", date=None, author=None):
         self.info = {
-            "version": "1.0.0" if version is None else version,
-            "date": datetime.date.today().strftime("%Y-%m-%d") if date is None else date,
-            "author": "unitree" if author is None else author,
-            "image": {"width": self.image_size[0], "height": self.image_size[1], "fps": self.frequency},
-            "depth": {"width": self.image_size[0], "height": self.image_size[1], "fps": self.frequency},
-            "audio": {"sample_rate": 16000, "channels": 1, "format": "PCM", "bits": 16},  # PCM_S16
-            "joint_names": {
-                "left_arm": [
-                    "kLeftShoulderPitch",
-                    "kLeftShoulderRoll",
-                    "kLeftShoulderYaw",
-                    "kLeftElbow",
-                    "kLeftWristRoll",
-                    "kLeftWristPitch",
-                    "kLeftWristyaw",
-                ],
-                "left_ee": [],
-                "right_arm": [],
-                "right_ee": [],
-                "body": [],
-            },
-            "tactile_names": {
-                "left_ee": [],
-                "right_ee": [],
-            },
-            "sim_state": "",
-        }
+                "version": "1.0.0" if version is None else version, 
+                "date": datetime.date.today().strftime("%Y-%m-%d") if date is None else date,
+                "author": "unitree" if author is None else author,
+                "image": {"width":self.image_size[0], "height":self.image_size[1], "fps":self.frequency},
+                "depth": {"width":self.image_size[0], "height":self.image_size[1], "fps":self.frequency},
+                "audio": {"sample_rate": 16000, "channels": 1, "format":"PCM", "bits":16},    # PCM_S16
+                "joint_names":{
+                    "left_arm":   ["kLeftShoulderPitch", "kLeftShoulderRoll", "kLeftShoulderYaw", "kLeftElbow", "kLeftWristRoll", "kLeftWristPitch", "kLeftWristYaw"],
+                    "left_ee":    ["kLeftHandThumb0", "kLeftHandThumb1", "kLeftHandThumb2", "kLeftHandMiddle0", "kLeftHandMiddle1", "kLeftHandIndex0", "kLeftHandIndex1"],
+                    "right_arm":  ["kRightShoulderPitch", "kRightShoulderRoll", "kRightShoulderYaw", "kRightElbow", "kRightWristRoll", "kRightWristPitch", "kRightWristYaw"],
+                    "right_ee":   ["kRightHandThumb0", "kRightHandThumb1", "kRightHandThumb2", "kRightHandIndex0", "kRightHandIndex1", "kRightHandMiddle0", "kRightHandMiddle1"],
+                    "waist":      ["kWaistYaw"],  
+                    "base":       [],  
+                },
+                
+                "velocity_names": {
+                    "base":       ["vx", "vy", "vyaw"],  
+                },
 
-    def text_desc(self):
-        self.text = {
-            "goal": "Place the wooden blocks into the yellow frame, stacking them from bottom to top in the order: red, yellow, green.",
-            "desc": "Using the gripper, first place the red wooden block into the yellow frame. Next, stack the yellow wooden block on top of the red one, and finally place the green wooden block on top of the yellow block.",
-            "steps": "",
-        }
+                "tactile_names": {
+                    "left_ee": ["thumb_base", "thumb_tip", "middle_base", "middle_tip", "index_base", "index_tip", "palm_0", "palm_1", "palm_2"],
+                    "right_ee": ["thumb_base", "thumb_tip", "index_base", "index_tip", "middle_base", "middle_tip", "palm_0", "palm_1", "palm_2"],
+                }, 
+                "sim_state": ""
+            }
 
+ 
     def create_episode(self):
         """
         Create a new episode.
@@ -93,9 +97,7 @@ class EpisodeWriter:
             Once successfully created, this function will only be available again after save_episode complete its save task.
         """
         if not self.is_available:
-            logger_mp.info(
-                "==> The class is currently unavailable for new operations. Please wait until ongoing tasks are completed."
-            )
+            logger_mp.info("==> The class is currently unavailable for new operations. Please wait until ongoing tasks are completed.")
             return False  # Return False if the class is unavailable
 
         # Reset episode-related data and create necessary directories
@@ -112,6 +114,15 @@ class EpisodeWriter:
         os.makedirs(self.color_dir, exist_ok=True)
         os.makedirs(self.depth_dir, exist_ok=True)
         os.makedirs(self.audio_dir, exist_ok=True)
+        with open(self.json_path, "w", encoding="utf-8") as f:
+            f.write("{\n")
+            f.write(""info": " + json.dumps(self.info, ensure_ascii=False, indent=4) + ",\n")
+            f.write(""text": " + json.dumps(self.text, ensure_ascii=False, indent=4) + ",\n")
+            f.write(""data": [\n")
+        self.first_item = True   # Flag to handle commas in JSON array
+
+        if self.rerun_log:
+            self.online_logger = RerunLogger(prefix="online/", IdxRangeBoundary = 60, memory_limit="300MB")
 
         self.is_available = False  # After the episode is created, the class is marked as unavailable until the episode is successfully saved
         logger_mp.info(f"==> New episode created: {self.episode_dir}")
@@ -181,30 +192,35 @@ class EpisodeWriter:
                 item_data["audios"][mic] = os.path.join("audios", audio_name)
 
         # Update episode data
-        self.episode_data.append(item_data)
+        with open(self.json_path, "a", encoding="utf-8") as f:
+            if not self.first_item:
+                f.write(",\n")
+            f.write(json.dumps(item_data, ensure_ascii=False, indent=4))
+            self.first_item = False
 
-    def save_episode(self, result):
+        # Log data if necessary
+        if self.rerun_log:
+            curent_record_time = time.time()
+            logger_mp.info(f"==> episode_id:{self.episode_id}  item_id:{idx}  current_time:{curent_record_time}")
+            self.rerun_logger.log_item_data(item_data)
+
+    def save_episode(self):
         """
         Trigger the save operation. This sets the save flag, and the process_queue thread will handle it.
         """
         self.need_save = True  # Set the save flag
-        self.result = result
         logger_mp.info("==> Episode saved start...")
 
     def _save_episode(self):
         """
         Save the episode data to a JSON file.
         """
-        self.data["info"] = self.info
-        self.data["text"] = self.text
-        self.data["data"] = self.episode_data
-        self.data["result"] = self.result
+        with open(self.json_path, "a", encoding="utf-8") as f:
+            f.write("\n]\n}")      # Close the JSON array and object
 
-        with open(self.json_path, "w", encoding="utf-8") as jsonf:
-            jsonf.write(json.dumps(self.data, indent=4, ensure_ascii=False))
-        self.need_save = False  # Reset the save flag
-        self.is_available = True  # Mark the class as available after saving
-        logger_mp.info(f"==> Episode saved successfully to {self.json_path} with result: {self.result}")
+        self.need_save = False     # Reset the save flag
+        self.is_available = True   # Mark the class as available after saving
+        logger_mp.info(f"==> Episode saved successfully to {self.json_path}.")
 
     def close(self):
         """
@@ -212,7 +228,7 @@ class EpisodeWriter:
         """
         self.item_data_queue.join()
         if not self.is_available:  # If self.is_available is False, it means there is still data not saved.
-            self.save_episode(self.result)
+            self.save_episode()
         while not self.is_available:
             time.sleep(0.01)
         self.stop_worker = True
