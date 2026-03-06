@@ -59,7 +59,7 @@ from robot_sdk.make_robot import (
     setup_image_client as setup_image_client_sdk,
     setup_robot_interface,
 )
-from robot_sdk.robot_control.hand_IO_control import get_IO_hand_state, hand_IO_ctrl
+from robot_sdk.robot_control.hand_IO_control import get_hand_io_controller, get_IO_hand_state, hand_IO_ctrl
 from robot_sdk.utils.g1_episode_recorder import G1EpisodeRecorder
 from robot_sdk.utils.utils import (
     _action_to_sized_vector,
@@ -122,8 +122,8 @@ def _to_binary_trigger(value: float) -> int:
 
 
 def _hand_state_to_trigger(hand_state: str) -> float:
-    # In this eval path, trigger=1 corresponds to close.
-    return 1.0 if hand_state == "close" else 0.0
+    # In this eval path, trigger=1 corresponds to open.
+    return 1.0 if hand_state == "open" else 0.0
 
 
 def _read_initial_pose_from_dataset(dataset_path: str) -> dict[str, Any]:
@@ -366,6 +366,30 @@ def _read_ee_side_states(ee_enabled: bool, ee_shared_mem: Dict[str, Any], ee_dof
     return side_states
 
 
+def _read_dex3_feedback(side_order: tuple[str, ...]) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    torques: dict[str, np.ndarray] = {
+        "left": np.zeros(0, dtype=np.float32),
+        "right": np.zeros(0, dtype=np.float32),
+    }
+    tactiles: dict[str, np.ndarray] = {
+        "left": np.zeros(0, dtype=np.float32),
+        "right": np.zeros(0, dtype=np.float32),
+    }
+    try:
+        fb = get_hand_io_controller().get_feedback()
+        for side in side_order:
+            if side == "left":
+                torques["left"] = np.asarray(fb.get("left_tau", np.zeros(0)), dtype=np.float32)
+                tactiles["left"] = np.asarray(fb.get("left_press_corr", np.zeros(0)), dtype=np.float32)
+            elif side == "right":
+                torques["right"] = np.asarray(fb.get("right_tau", np.zeros(0)), dtype=np.float32)
+                tactiles["right"] = np.asarray(fb.get("right_press_corr", np.zeros(0)), dtype=np.float32)
+    except Exception:
+        # Keep recording robust; torque/tactile are optional fields.
+        pass
+    return torques, tactiles
+
+
 def _build_policy_observation(
     camera_keys: List[str],
     observation: Dict[str, Any],
@@ -426,11 +450,11 @@ def _execute_action(
         q14: Optional[np.ndarray] = None
         if use_left_trig:
             left_trig = _to_binary_trigger(action_dict[LEFT_TRIG_KEY])
-            left_action = "close" if left_trig == 1 else "open"
+            left_action = "open" if left_trig == 1 else "close"
             q14 = hand_IO_ctrl(action=left_action, side="left", publish=False)
         if use_right_trig:
             right_trig = _to_binary_trigger(action_dict[RIGHT_TRIG_KEY])
-            right_action = "close" if right_trig == 1 else "open"
+            right_action = "open" if right_trig == 1 else "close"
             q14 = hand_IO_ctrl(action=right_action, side="right", publish=False)
 
         if q14 is not None:
@@ -748,6 +772,7 @@ def eval(cfg: EvalConfig):
                                 ee_shared_mem=ee_shared_mem,
                             )
                             if episode_recorder is not None:
+                                frame_torques, frame_tactiles = _read_dex3_feedback(ee_sides)
                                 episode_recorder.record_step(
                                     policy_obs=policy_obs,
                                     camera_keys=policy.camera_keys,
@@ -755,6 +780,8 @@ def eval(cfg: EvalConfig):
                                     current_waist_yaw=float(current_waist_yaw),
                                     side_states=side_states,
                                     action_dict=action_dict,
+                                    torques=frame_torques,
+                                    tactiles=frame_tactiles,
                                 )
 
                 # Maintain frequency

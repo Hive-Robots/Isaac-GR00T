@@ -159,8 +159,6 @@ Arguments:
 - `--dataset_path` (str | None, default: None). Optional dataset path for loading initial robot pose.
 - `--record` (bool, default: False). Enable episode recording during loop eval.
 - `--record_dir` (str, default: `g1_eval_records`). Default recording output directory.
-- `--record_save_dir` (str | None, default: None). Explicit recording output directory; when set, takes precedence over `--record_dir`.
-- `--record_rerun_log` (bool, default: False). Enable rerun logging in `EpisodeWriter` while recording.
 
 You can check [`docker/g1_policy_client`](../docker/g1_policy_client/README.md) for more information on running the `eval_g1` code directly on the robot.
 

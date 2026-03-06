@@ -463,14 +463,24 @@ def _upload_v2_dataset(repo_id: str) -> None:
             "Verify `repo_id` is '<namespace>/<name>' and that your token has write access."
         ) from exc
 
+    # Prefer chunked large-folder upload to avoid failures on big datasets.
+    # Fallback to regular upload for older huggingface_hub versions.
+    upload_large = getattr(api, "upload_large_folder", None)
     try:
-        api.upload_folder(
-            repo_id=repo_id,
-            repo_type="dataset",
-            folder_path=str(dataset_path),
-            path_in_repo="",
-            commit_message="Upload LeRobot v2.1 dataset",
-        )
+        if callable(upload_large):
+            upload_large(
+                repo_id=repo_id,
+                repo_type="dataset",
+                folder_path=str(dataset_path),
+            )
+        else:
+            api.upload_folder(
+                repo_id=repo_id,
+                repo_type="dataset",
+                folder_path=str(dataset_path),
+                path_in_repo="",
+                commit_message="Upload LeRobot v2.1 dataset",
+            )
     except Exception as exc:
         raise RuntimeError(
             "Failed to upload dataset to Hugging Face Hub. "

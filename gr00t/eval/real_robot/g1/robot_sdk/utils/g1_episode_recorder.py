@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
 import numpy as np
@@ -47,9 +48,10 @@ RIGHT_HAND_STATE_KEYS = [
 WAIST_STATE_KEY = "kWaistYaw"
 LEFT_TRIG_KEY = "left_trig"
 RIGHT_TRIG_KEY = "right_trig"
+BASE_VEL_KEYS = ["vx", "vy", "vyaw"]
 
 
-def _f32_list(values: Iterable[float]) -> list[float]:
+def to_float_list(values: Iterable[float]) -> list[float]:
     return [float(v) for v in values]
 
 
@@ -60,6 +62,17 @@ def _vector_from_action(action_dict: Dict[str, float], keys: list[str], fallback
         default = float(fb[idx]) if idx < fb.shape[0] else 0.0
         out.append(float(action_dict.get(key, default)))
     return out
+
+
+def _base_qvel_from_action(action_dict: Dict[str, float]) -> list[float]:
+    return [float(action_dict.get(key, 0.0)) for key in BASE_VEL_KEYS]
+
+
+def _torque_from_side(torques: Optional[Dict[str, np.ndarray]], side: str) -> list[float]:
+    if not torques:
+        return []
+    arr = np.asarray(torques.get(side, np.zeros(0, dtype=np.float32)), dtype=np.float32)
+    return to_float_list(arr)
 
 
 @dataclass
@@ -82,7 +95,8 @@ class G1EpisodeRecorder:
         self.writer.info.setdefault("joint_names", {})
         self.writer.info["joint_names"]["left_trig"] = [LEFT_TRIG_KEY]
         self.writer.info["joint_names"]["right_trig"] = [RIGHT_TRIG_KEY]
-        self.writer.text["task_name"] = "eval_g1_loop"
+        task_name = Path(self.task_dir).name.strip() or "eval_g1_loop"
+        self.writer.text["task_name"] = task_name
         self.writer.text["prompt_idx"] = 0
         self.writer.text["task_idx"] = 0
         self.is_recording = False
@@ -113,6 +127,8 @@ class G1EpisodeRecorder:
         current_waist_yaw: float,
         side_states: Dict[str, np.ndarray],
         action_dict: Dict[str, float],
+        torques: Optional[Dict[str, np.ndarray]] = None,
+        tactiles: Optional[Dict[str, np.ndarray]] = None,
     ) -> None:
         if not self.is_recording:
             return
@@ -129,14 +145,16 @@ class G1EpisodeRecorder:
         arm_q = np.asarray(current_arm_q, dtype=np.float32)
         left_state = np.asarray(side_states.get("left", np.zeros(0, dtype=np.float32)), dtype=np.float32)
         right_state = np.asarray(side_states.get("right", np.zeros(0, dtype=np.float32)), dtype=np.float32)
+        left_torque = _torque_from_side(torques, "left")
+        right_torque = _torque_from_side(torques, "right")
 
         states = {
-            "left_arm": {"qpos": _f32_list(arm_q[:7]), "qvel": [], "torque": []},
-            "right_arm": {"qpos": _f32_list(arm_q[7:14]), "qvel": [], "torque": []},
-            "left_ee": {"qpos": _f32_list(left_state), "qvel": [], "torque": []},
-            "right_ee": {"qpos": _f32_list(right_state), "qvel": [], "torque": []},
+            "left_arm": {"qpos": to_float_list(arm_q[:7]), "qvel": [], "torque": []},
+            "right_arm": {"qpos": to_float_list(arm_q[7:14]), "qvel": [], "torque": []},
+            "left_ee": {"qpos": to_float_list(left_state), "qvel": [], "torque": left_torque},
+            "right_ee": {"qpos": to_float_list(right_state), "qvel": [], "torque": right_torque},
             "waist": {"qpos": [float(current_waist_yaw)], "qvel": []},
-            "base": {"qpos": [], "qvel": []},
+            "base": {"qpos": [], "qvel": _base_qvel_from_action(action_dict)},
         }
 
         actions = {
@@ -153,18 +171,18 @@ class G1EpisodeRecorder:
             "left_ee": {
                 "qpos": _vector_from_action(action_dict, LEFT_HAND_STATE_KEYS, left_state),
                 "qvel": [],
-                "torque": [],
+                "torque": left_torque,
             },
             "right_ee": {
                 "qpos": _vector_from_action(action_dict, RIGHT_HAND_STATE_KEYS, right_state),
                 "qvel": [],
-                "torque": [],
+                "torque": right_torque,
             },
             "waist": {
                 "qpos": [float(action_dict.get(WAIST_STATE_KEY, current_waist_yaw))],
                 "qvel": [],
             },
-            "base": {"qpos": [], "qvel": [0.0, 0.0, 0.0]},
+            "base": {"qpos": [], "qvel": _base_qvel_from_action(action_dict)},
             "left_trig": {
                 "qpos": [int(np.clip(np.rint(float(action_dict.get(LEFT_TRIG_KEY, 0.0))), 0.0, 1.0))]
             },
@@ -173,12 +191,30 @@ class G1EpisodeRecorder:
             },
         }
 
+        frame_torques: Optional[dict[str, list[float]]] = None
+        if left_torque or right_torque:
+            frame_torques = {
+                "left_ee": left_torque,
+                "right_ee": right_torque,
+            }
+
+        frame_tactiles: Optional[dict[str, list[float]]] = None
+        if tactiles:
+            left_tactile = to_float_list(np.asarray(tactiles.get("left", np.zeros(0, dtype=np.float32)), dtype=np.float32))
+            right_tactile = to_float_list(np.asarray(tactiles.get("right", np.zeros(0, dtype=np.float32)), dtype=np.float32))
+            if left_tactile or right_tactile:
+                frame_tactiles = {
+                    "left_ee": left_tactile,
+                    "right_ee": right_tactile,
+                }
+
         self.writer.add_item(
             colors=colors,
             depths={},
             states=states,
             actions=actions,
-            tactiles=None,
+            tactiles=frame_tactiles,
+            torques=frame_torques,
             audios=None,
             sim_state=None,
         )
