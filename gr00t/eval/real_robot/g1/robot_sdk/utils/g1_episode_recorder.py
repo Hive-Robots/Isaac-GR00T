@@ -68,6 +68,16 @@ def _base_qvel_from_action(action_dict: Dict[str, float]) -> list[float]:
     return [float(action_dict.get(key, 0.0)) for key in BASE_VEL_KEYS]
 
 
+def _binary_trigger(value: float) -> int:
+    return int(np.clip(np.rint(float(value)), 0.0, 1.0))
+
+
+def _trigger_from_obs_or_action(policy_obs: Dict[str, Any], action_dict: Dict[str, float], key: str) -> int:
+    if key in policy_obs:
+        return _binary_trigger(policy_obs[key])
+    return _binary_trigger(action_dict.get(key, 0.0))
+
+
 def _torque_from_side(torques: Optional[Dict[str, np.ndarray]], side: str) -> list[float]:
     if not torques:
         return []
@@ -147,6 +157,8 @@ class G1EpisodeRecorder:
         right_state = np.asarray(side_states.get("right", np.zeros(0, dtype=np.float32)), dtype=np.float32)
         left_torque = _torque_from_side(torques, "left")
         right_torque = _torque_from_side(torques, "right")
+        left_trig_state = _trigger_from_obs_or_action(policy_obs, action_dict, LEFT_TRIG_KEY)
+        right_trig_state = _trigger_from_obs_or_action(policy_obs, action_dict, RIGHT_TRIG_KEY)
 
         states = {
             "left_arm": {"qpos": to_float_list(arm_q[:7]), "qvel": [], "torque": []},
@@ -155,6 +167,8 @@ class G1EpisodeRecorder:
             "right_ee": {"qpos": to_float_list(right_state), "qvel": [], "torque": right_torque},
             "waist": {"qpos": [float(current_waist_yaw)], "qvel": []},
             "base": {"qpos": [], "qvel": _base_qvel_from_action(action_dict)},
+            "left_trig": {"qpos": [left_trig_state], "qvel": [], "torque": []},
+            "right_trig": {"qpos": [right_trig_state], "qvel": [], "torque": []},
         }
 
         actions = {
@@ -184,10 +198,10 @@ class G1EpisodeRecorder:
             },
             "base": {"qpos": [], "qvel": _base_qvel_from_action(action_dict)},
             "left_trig": {
-                "qpos": [int(np.clip(np.rint(float(action_dict.get(LEFT_TRIG_KEY, 0.0))), 0.0, 1.0))]
+                "qpos": [_binary_trigger(action_dict.get(LEFT_TRIG_KEY, 0.0))]
             },
             "right_trig": {
-                "qpos": [int(np.clip(np.rint(float(action_dict.get(RIGHT_TRIG_KEY, 0.0))), 0.0, 1.0))]
+                "qpos": [_binary_trigger(action_dict.get(RIGHT_TRIG_KEY, 0.0))]
             },
         }
 
